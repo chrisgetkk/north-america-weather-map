@@ -4,120 +4,55 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>North America Live Weather Map</title>
-    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            background: #0f172a; 
-            color: #e2e8f0;
-            height: 100vh;
-            overflow: hidden;
+            background: #0f172a; color: #e2e8f0; height: 100vh; overflow: hidden;
         }
         #map { width: 100%; height: 100%; background: #0f172a; }
         
         .control-panel {
-            position: absolute;
-            top: 12px;
-            right: 12px;
-            z-index: 1000;
-            background: rgba(15, 23, 42, 0.95);
-            border: 1px solid #334155;
-            border-radius: 12px;
-            padding: 14px 16px;
-            width: 300px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            max-height: 92vh;
-            overflow-y: auto;
+            position: absolute; top: 12px; right: 12px; z-index: 1000;
+            background: rgba(15, 23, 42, 0.95); border: 1px solid #334155;
+            border-radius: 12px; padding: 14px 16px; width: 300px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); max-height: 92vh; overflow-y: auto;
         }
-        .control-panel h2 {
-            font-size: 16px;
-            margin-bottom: 12px;
-            color: #38bdf8;
-            font-weight: 600;
-        }
-        .control-group {
-            margin-bottom: 12px;
-        }
-        .control-group label {
-            display: block;
-            font-size: 12px;
-            color: #94a3b8;
-            margin-bottom: 4px;
-            font-weight: 500;
-        }
+        .control-panel h2 { font-size: 16px; margin-bottom: 12px; color: #38bdf8; font-weight: 600; }
+        .control-group { margin-bottom: 12px; }
+        .control-group label { display: block; font-size: 12px; color: #94a3b8; margin-bottom: 4px; font-weight: 500; }
         select, button {
-            width: 100%;
-            padding: 8px 10px;
-            border-radius: 6px;
-            border: 1px solid #475569;
-            background: #1e293b;
-            color: #f1f5f9;
-            font-size: 13px;
-            cursor: pointer;
+            width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid #475569;
+            background: #1e293b; color: #f1f5f9; font-size: 13px; cursor: pointer;
         }
         select:hover, button:hover { border-color: #38bdf8; }
-        button {
-            background: #0ea5e9;
-            border-color: #0ea5e9;
-            font-weight: 600;
-            margin-top: 4px;
-        }
+        button { background: #0ea5e9; border-color: #0ea5e9; font-weight: 600; margin-top: 4px; }
         button:hover { background: #0284c7; }
-        button.secondary {
-            background: #334155;
-            border-color: #475569;
-        }
+        button.secondary { background: #334155; border-color: #475569; }
         button.secondary:hover { background: #475569; }
-        
-        .btn-row {
-            display: flex;
-            gap: 6px;
-            margin-top: 6px;
-        }
+        .btn-row { display: flex; gap: 6px; margin-top: 6px; }
         .btn-row button { flex: 1; }
         
         .status {
-            font-size: 11px;
-            color: #64748b;
-            margin-top: 12px;
-            line-height: 1.45;
-            border-top: 1px solid #334155;
-            padding-top: 10px;
+            font-size: 11px; color: #64748b; margin-top: 12px; line-height: 1.45;
+            border-top: 1px solid #334155; padding-top: 10px;
         }
         .status span { color: #22c55e; }
         
         .alert-box {
-            background: rgba(239, 68, 68, 0.15);
-            border: 1px solid #ef4444;
-            border-radius: 8px;
-            padding: 8px 10px;
-            margin-top: 10px;
-            font-size: 12px;
-            max-height: 140px;
-            overflow-y: auto;
+            background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444;
+            border-radius: 8px; padding: 8px 10px; margin-top: 10px;
+            font-size: 12px; max-height: 140px; overflow-y: auto;
         }
         .alert-box strong { color: #f87171; }
-        .alert-item {
-            margin-bottom: 6px;
-            padding-bottom: 6px;
-            border-bottom: 1px solid rgba(239,68,68,0.2);
-        }
+        .alert-item { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(239,68,68,0.2); }
         .alert-item:last-child { border-bottom: none; margin-bottom: 0; }
         
         .temp-marker {
-            background: rgba(15, 23, 42, 0.9);
-            border: 2px solid #38bdf8;
-            border-radius: 50%;
-            color: #fff;
-            font-weight: 700;
-            font-size: 12px;
-            text-align: center;
-            line-height: 30px;
-            width: 34px !important;
-            height: 34px !important;
+            background: rgba(15, 23, 42, 0.9); border: 2px solid #38bdf8; border-radius: 50%;
+            color: #fff; font-weight: 700; font-size: 12px; text-align: center;
+            line-height: 30px; width: 34px !important; height: 34px !important;
             box-shadow: 0 2px 8px rgba(0,0,0,0.5);
         }
         .temp-marker.hot  { border-color: #ef4444; background: rgba(127, 29, 29, 0.92); }
@@ -126,46 +61,21 @@
         .temp-marker.cold { border-color: #06b6d4; background: rgba(8, 47, 73, 0.92); }
         
         .city-label {
-            background: transparent;
-            border: none;
-            color: #e2e8f0;
-            font-weight: 600;
-            font-size: 11px;
-            text-shadow: 0 0 4px #000, 0 0 4px #000, 1px 1px 2px #000;
-            white-space: nowrap;
+            background: transparent; border: none; color: #e2e8f0; font-weight: 600;
+            font-size: 11px; text-shadow: 0 0 4px #000, 0 0 4px #000, 1px 1px 2px #000; white-space: nowrap;
         }
-        .city-label.major {
-            font-size: 13px;
-            font-weight: 700;
-            color: #f8fafc;
-        }
+        .city-label.major { font-size: 13px; font-weight: 700; color: #f8fafc; }
         
         .legend {
-            position: absolute;
-            bottom: 22px;
-            left: 12px;
-            z-index: 1000;
-            background: rgba(15, 23, 42, 0.9);
-            border: 1px solid #334155;
-            border-radius: 8px;
-            padding: 7px 12px;
-            font-size: 11px;
-            color: #94a3b8;
+            position: absolute; bottom: 22px; left: 12px; z-index: 1000;
+            background: rgba(15, 23, 42, 0.9); border: 1px solid #334155;
+            border-radius: 8px; padding: 7px 12px; font-size: 11px; color: #94a3b8;
         }
-        
         .leaflet-control-attribution {
-            background: rgba(15, 23, 42, 0.85) !important;
-            color: #64748b !important;
-            font-size: 10px !important;
+            background: rgba(15, 23, 42, 0.85) !important; color: #64748b !important; font-size: 10px !important;
         }
         .leaflet-control-attribution a { color: #38bdf8 !important; }
-        
-        .radar-time {
-            font-size: 11px;
-            color: #94a3b8;
-            text-align: center;
-            margin-top: 4px;
-        }
+        .radar-time { font-size: 11px; color: #94a3b8; text-align: center; margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -189,7 +99,6 @@
                 <option value="on" selected>On</option>
                 <option value="off">Off</option>
             </select>
-            
             <div class="btn-row">
                 <button id="playBtn" class="secondary">▶ Play Loop</button>
                 <button id="pauseBtn" class="secondary">⏸ Pause</button>
@@ -200,7 +109,7 @@
         <div class="control-group">
             <label>Temperature Markers</label>
             <select id="tempSelect">
-                <option value="on" selected>On (NWS Live)</option>
+                <option value="on" selected>On (Smart / View-based)</option>
                 <option value="off">Off</option>
             </select>
         </div>
@@ -223,164 +132,255 @@
             <div>Alerts: <span id="alertStatus">Loading...</span></div>
             <div>Last update: <span id="lastUpdate">—</span></div>
             <div style="margin-top:8px;font-size:10px;color:#475569;">
-                Free data: NWS + RainViewer + Esri + Iowa State<br>
-                Future-proof: Edit the CONFIG section in the code.
+                Free data • Smart temps load more stations as you zoom in<br>
+                Edit the CONFIG section to customize later.
             </div>
         </div>
     </div>
     
-    <div class="legend">
-        Zoom in for more cities • Click temp circles for details
-    </div>
+    <div class="legend">Zoom in for denser temperatures & cities • Click circles for details</div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    
     <script>
     // ============================================================
-    // CONFIGURATION - Easy place to change settings later
+    // CONFIG
     // ============================================================
     const CONFIG = {
         defaultCenter: [39.8, -98.5],
         defaultZoom: 4,
         minZoom: 3,
         maxZoom: 12,
-        
-        tempRefreshMs: 5 * 60 * 1000,
+        tempRefreshMs: 6 * 60 * 1000,
         radarRefreshMs: 3 * 60 * 1000,
         alertRefreshMs: 4 * 60 * 1000,
-        
-        userAgent: "NorthAmericaWeatherMap/2.0 (personal use)",
-        
+        userAgent: "NorthAmericaWeatherMap/2.1 (personal use)",
         radarOpacity: 0.65,
         satelliteOpacity: 0.55,
-        radarFramesToKeep: 12
+        radarFramesToKeep: 12,
+        maxTempsToFetch: 55          // safety limit per view
     };
-    
-    const CITIES = [
-        {name:"New York", lat:40.71, lon:-74.01, tier:1},
-        {name:"Los Angeles", lat:34.05, lon:-118.24, tier:1},
-        {name:"Chicago", lat:41.88, lon:-87.63, tier:1},
-        {name:"Houston", lat:29.76, lon:-95.37, tier:1},
-        {name:"Phoenix", lat:33.45, lon:-112.07, tier:1},
-        {name:"Philadelphia", lat:39.95, lon:-75.17, tier:1},
-        {name:"San Antonio", lat:29.42, lon:-98.49, tier:1},
-        {name:"San Diego", lat:32.72, lon:-117.16, tier:1},
-        {name:"Dallas", lat:32.78, lon:-96.80, tier:1},
-        {name:"San Jose", lat:37.34, lon:-121.89, tier:1},
-        {name:"Austin", lat:30.27, lon:-97.74, tier:1},
-        {name:"Jacksonville", lat:30.33, lon:-81.66, tier:1},
-        {name:"Columbus", lat:39.96, lon:-83.00, tier:1},
-        {name:"Charlotte", lat:35.23, lon:-80.84, tier:1},
-        {name:"Indianapolis", lat:39.77, lon:-86.16, tier:1},
-        {name:"San Francisco", lat:37.77, lon:-122.42, tier:1},
-        {name:"Seattle", lat:47.61, lon:-122.33, tier:1},
-        {name:"Denver", lat:39.74, lon:-104.99, tier:1},
-        {name:"Washington", lat:38.91, lon:-77.04, tier:1},
-        {name:"Boston", lat:42.36, lon:-71.06, tier:1},
-        {name:"Nashville", lat:36.16, lon:-86.78, tier:1},
-        {name:"Detroit", lat:42.33, lon:-83.05, tier:1},
-        {name:"Oklahoma City", lat:35.47, lon:-97.52, tier:1},
-        {name:"Portland", lat:45.52, lon:-122.68, tier:1},
-        {name:"Las Vegas", lat:36.17, lon:-115.14, tier:1},
-        {name:"Memphis", lat:35.15, lon:-90.05, tier:1},
-        {name:"Louisville", lat:38.25, lon:-85.76, tier:1},
-        {name:"Baltimore", lat:39.29, lon:-76.61, tier:1},
-        {name:"Milwaukee", lat:43.04, lon:-87.91, tier:1},
-        {name:"Albuquerque", lat:35.08, lon:-106.65, tier:1},
-        {name:"Tucson", lat:32.22, lon:-110.97, tier:1},
-        {name:"Fresno", lat:36.74, lon:-119.77, tier:1},
-        {name:"Sacramento", lat:38.58, lon:-121.49, tier:1},
-        {name:"Kansas City", lat:39.10, lon:-94.58, tier:1},
-        {name:"Atlanta", lat:33.75, lon:-84.39, tier:1},
-        {name:"Omaha", lat:41.26, lon:-95.94, tier:1},
-        {name:"Raleigh", lat:35.78, lon:-78.64, tier:1},
-        {name:"Miami", lat:25.76, lon:-80.19, tier:1},
-        {name:"Minneapolis", lat:44.98, lon:-93.27, tier:1},
-        {name:"Tulsa", lat:36.15, lon:-95.99, tier:1},
-        {name:"Tampa", lat:27.95, lon:-82.46, tier:1},
-        {name:"New Orleans", lat:29.95, lon:-90.07, tier:1},
-        {name:"Cleveland", lat:41.50, lon:-81.69, tier:1},
-        {name:"Honolulu", lat:21.31, lon:-157.86, tier:1},
-        {name:"Anchorage", lat:61.22, lon:-149.90, tier:1},
-        {name:"Salt Lake City", lat:40.76, lon:-111.89, tier:1},
-        {name:"Boise", lat:43.62, lon:-116.20, tier:1},
-        {name:"Spokane", lat:47.66, lon:-117.43, tier:1},
-        {name:"Billings", lat:45.78, lon:-108.50, tier:1},
-        {name:"Sioux Falls", lat:43.54, lon:-96.73, tier:1},
-        {name:"Fargo", lat:46.88, lon:-96.79, tier:1},
-        {name:"St. Louis", lat:38.63, lon:-90.20, tier:1},
-        {name:"Cincinnati", lat:39.10, lon:-84.51, tier:1},
-        {name:"Pittsburgh", lat:40.44, lon:-79.99, tier:1},
-        {name:"Orlando", lat:28.54, lon:-81.38, tier:1},
-        {name:"Buffalo", lat:42.89, lon:-78.88, tier:1},
-        {name:"Richmond", lat:37.54, lon:-77.44, tier:1},
-        {name:"Birmingham", lat:33.52, lon:-86.81, tier:1},
-        {name:"Little Rock", lat:34.75, lon:-92.29, tier:1},
-        {name:"Des Moines", lat:41.59, lon:-93.62, tier:1},
-        {name:"Jackson", lat:32.30, lon:-90.18, tier:1},
-        {name:"Providence", lat:41.82, lon:-71.42, tier:1}
-    ];
-    
+
+    // Larger station list for smart loading
     const STATIONS = [
-        {id:"KJFK", name:"New York", lat:40.64, lon:-73.78},
-        {id:"KLAX", name:"Los Angeles", lat:33.94, lon:-118.41},
-        {id:"KORD", name:"Chicago", lat:41.98, lon:-87.90},
-        {id:"KIAH", name:"Houston", lat:29.98, lon:-95.34},
-        {id:"KPHX", name:"Phoenix", lat:33.43, lon:-112.01},
-        {id:"KPHL", name:"Philadelphia", lat:39.87, lon:-75.24},
-        {id:"KSAT", name:"San Antonio", lat:29.53, lon:-98.47},
-        {id:"KSAN", name:"San Diego", lat:32.73, lon:-117.19},
-        {id:"KDFW", name:"Dallas", lat:32.90, lon:-97.04},
-        {id:"KSJC", name:"San Jose", lat:37.36, lon:-121.93},
-        {id:"KAUS", name:"Austin", lat:30.19, lon:-97.67},
-        {id:"KJAX", name:"Jacksonville", lat:30.49, lon:-81.69},
-        {id:"KCMH", name:"Columbus", lat:39.99, lon:-82.88},
-        {id:"KCLT", name:"Charlotte", lat:35.21, lon:-80.94},
-        {id:"KIND", name:"Indianapolis", lat:39.72, lon:-86.29},
-        {id:"KSFO", name:"San Francisco", lat:37.62, lon:-122.38},
-        {id:"KSEA", name:"Seattle", lat:47.45, lon:-122.31},
-        {id:"KDEN", name:"Denver", lat:39.86, lon:-104.67},
-        {id:"KDCA", name:"Washington", lat:38.85, lon:-77.04},
-        {id:"KBOS", name:"Boston", lat:42.36, lon:-71.01},
-        {id:"KBNA", name:"Nashville", lat:36.12, lon:-86.68},
-        {id:"KDTW", name:"Detroit", lat:42.21, lon:-83.35},
-        {id:"KOKC", name:"Oklahoma City", lat:35.39, lon:-97.60},
-        {id:"KPDX", name:"Portland", lat:45.59, lon:-122.60},
-        {id:"KLAS", name:"Las Vegas", lat:36.08, lon:-115.15},
-        {id:"KMEM", name:"Memphis", lat:35.04, lon:-89.98},
-        {id:"KSDF", name:"Louisville", lat:38.17, lon:-85.74},
-        {id:"KBWI", name:"Baltimore", lat:39.18, lon:-76.67},
-        {id:"KMKE", name:"Milwaukee", lat:42.95, lon:-87.90},
-        {id:"KABQ", name:"Albuquerque", lat:35.04, lon:-106.61},
-        {id:"KTUS", name:"Tucson", lat:32.12, lon:-110.94},
-        {id:"KATL", name:"Atlanta", lat:33.64, lon:-84.43},
-        {id:"KOMA", name:"Omaha", lat:41.30, lon:-95.89},
-        {id:"KRDU", name:"Raleigh", lat:35.88, lon:-78.79},
-        {id:"KMIA", name:"Miami", lat:25.80, lon:-80.29},
-        {id:"KMSP", name:"Minneapolis", lat:44.88, lon:-93.22},
-        {id:"KTUL", name:"Tulsa", lat:36.20, lon:-95.89},
-        {id:"KTPA", name:"Tampa", lat:27.98, lon:-82.53},
-        {id:"KMSY", name:"New Orleans", lat:29.99, lon:-90.26},
-        {id:"KCLE", name:"Cleveland", lat:41.41, lon:-81.85},
-        {id:"PHNL", name:"Honolulu", lat:21.32, lon:-157.92},
-        {id:"PANC", name:"Anchorage", lat:61.17, lon:-150.00},
-        {id:"KSLC", name:"Salt Lake City", lat:40.79, lon:-111.98},
-        {id:"KBOI", name:"Boise", lat:43.56, lon:-116.22},
-        {id:"KBIL", name:"Billings", lat:45.81, lon:-108.54},
-        {id:"KGEG", name:"Spokane", lat:47.62, lon:-117.53},
-        {id:"KFSD", name:"Sioux Falls", lat:43.58, lon:-96.74},
-        {id:"KFAR", name:"Fargo", lat:46.92, lon:-96.82}
+        {id:"KJFK",name:"New York",lat:40.64,lon:-73.78},
+        {id:"KLGA",name:"LaGuardia",lat:40.78,lon:-73.87},
+        {id:"KEWR",name:"Newark",lat:40.69,lon:-74.17},
+        {id:"KLAX",name:"Los Angeles",lat:33.94,lon:-118.41},
+        {id:"KBUR",name:"Burbank",lat:34.20,lon:-118.36},
+        {id:"KSNA",name:"Orange County",lat:33.68,lon:-117.87},
+        {id:"KORD",name:"Chicago O'Hare",lat:41.98,lon:-87.90},
+        {id:"KMDW",name:"Chicago Midway",lat:41.79,lon:-87.75},
+        {id:"KIAH",name:"Houston",lat:29.98,lon:-95.34},
+        {id:"KHOU",name:"Houston Hobby",lat:29.65,lon:-95.28},
+        {id:"KPHX",name:"Phoenix",lat:33.43,lon:-112.01},
+        {id:"KPHL",name:"Philadelphia",lat:39.87,lon:-75.24},
+        {id:"KSAT",name:"San Antonio",lat:29.53,lon:-98.47},
+        {id:"KSAN",name:"San Diego",lat:32.73,lon:-117.19},
+        {id:"KDFW",name:"Dallas-Fort Worth",lat:32.90,lon:-97.04},
+        {id:"KDAL",name:"Dallas Love",lat:32.85,lon:-96.85},
+        {id:"KSJC",name:"San Jose",lat:37.36,lon:-121.93},
+        {id:"KSFO",name:"San Francisco",lat:37.62,lon:-122.38},
+        {id:"KOAK",name:"Oakland",lat:37.72,lon:-122.22},
+        {id:"KAUS",name:"Austin",lat:30.19,lon:-97.67},
+        {id:"KJAX",name:"Jacksonville",lat:30.49,lon:-81.69},
+        {id:"KCMH",name:"Columbus",lat:39.99,lon:-82.88},
+        {id:"KCLT",name:"Charlotte",lat:35.21,lon:-80.94},
+        {id:"KIND",name:"Indianapolis",lat:39.72,lon:-86.29},
+        {id:"KSEA",name:"Seattle",lat:47.45,lon:-122.31},
+        {id:"KBFI",name:"Seattle Boeing",lat:47.53,lon:-122.30},
+        {id:"KDEN",name:"Denver",lat:39.86,lon:-104.67},
+        {id:"KDCA",name:"Washington Reagan",lat:38.85,lon:-77.04},
+        {id:"KIAD",name:"Washington Dulles",lat:38.95,lon:-77.46},
+        {id:"KBWI",name:"Baltimore",lat:39.18,lon:-76.67},
+        {id:"KBOS",name:"Boston",lat:42.36,lon:-71.01},
+        {id:"KBNA",name:"Nashville",lat:36.12,lon:-86.68},
+        {id:"KDTW",name:"Detroit",lat:42.21,lon:-83.35},
+        {id:"KOKC",name:"Oklahoma City",lat:35.39,lon:-97.60},
+        {id:"KPDX",name:"Portland",lat:45.59,lon:-122.60},
+        {id:"KLAS",name:"Las Vegas",lat:36.08,lon:-115.15},
+        {id:"KMEM",name:"Memphis",lat:35.04,lon:-89.98},
+        {id:"KSDF",name:"Louisville",lat:38.17,lon:-85.74},
+        {id:"KMKE",name:"Milwaukee",lat:42.95,lon:-87.90},
+        {id:"KABQ",name:"Albuquerque",lat:35.04,lon:-106.61},
+        {id:"KTUS",name:"Tucson",lat:32.12,lon:-110.94},
+        {id:"KFAT",name:"Fresno",lat:36.78,lon:-119.72},
+        {id:"KSMF",name:"Sacramento",lat:38.70,lon:-121.59},
+        {id:"KMCI",name:"Kansas City",lat:39.30,lon:-94.71},
+        {id:"KATL",name:"Atlanta",lat:33.64,lon:-84.43},
+        {id:"KOMA",name:"Omaha",lat:41.30,lon:-95.89},
+        {id:"KCOS",name:"Colorado Springs",lat:38.81,lon:-104.70},
+        {id:"KRDU",name:"Raleigh",lat:35.88,lon:-78.79},
+        {id:"KMIA",name:"Miami",lat:25.80,lon:-80.29},
+        {id:"KFLL",name:"Fort Lauderdale",lat:26.07,lon:-80.15},
+        {id:"KMSP",name:"Minneapolis",lat:44.88,lon:-93.22},
+        {id:"KTUL",name:"Tulsa",lat:36.20,lon:-95.89},
+        {id:"KTPA",name:"Tampa",lat:27.98,lon:-82.53},
+        {id:"KMSY",name:"New Orleans",lat:29.99,lon:-90.26},
+        {id:"KCLE",name:"Cleveland",lat:41.41,lon:-81.85},
+        {id:"KSLC",name:"Salt Lake City",lat:40.79,lon:-111.98},
+        {id:"KBOI",name:"Boise",lat:43.56,lon:-116.22},
+        {id:"KBIL",name:"Billings",lat:45.81,lon:-108.54},
+        {id:"KGEG",name:"Spokane",lat:47.62,lon:-117.53},
+        {id:"KFSD",name:"Sioux Falls",lat:43.58,lon:-96.74},
+        {id:"KFAR",name:"Fargo",lat:46.92,lon:-96.82},
+        {id:"KSTL",name:"St. Louis",lat:38.75,lon:-90.37},
+        {id:"KCVG",name:"Cincinnati",lat:39.05,lon:-84.67},
+        {id:"KPIT",name:"Pittsburgh",lat:40.49,lon:-80.23},
+        {id:"KMCO",name:"Orlando",lat:28.43,lon:-81.31},
+        {id:"KBUF",name:"Buffalo",lat:42.94,lon:-78.73},
+        {id:"KRIC",name:"Richmond",lat:37.51,lon:-77.32},
+        {id:"KBHM",name:"Birmingham",lat:33.56,lon:-86.75},
+        {id:"KLIT",name:"Little Rock",lat:34.73,lon:-92.22},
+        {id:"KDSM",name:"Des Moines",lat:41.53,lon:-93.66},
+        {id:"KJAN",name:"Jackson",lat:32.31,lon:-90.08},
+        {id:"KPVD",name:"Providence",lat:41.72,lon:-71.43},
+        {id:"PHNL",name:"Honolulu",lat:21.32,lon:-157.92},
+        {id:"PANC",name:"Anchorage",lat:61.17,lon:-150.00},
+        {id:"KGTF",name:"Great Falls",lat:47.48,lon:-111.37},
+        {id:"KHLN",name:"Helena",lat:46.61,lon:-111.98},
+        {id:"KMSO",name:"Missoula",lat:46.92,lon:-114.09},
+        {id:"KBTM",name:"Butte",lat:45.95,lon:-112.50},
+        {id:"KIDA",name:"Idaho Falls",lat:43.52,lon:-112.07},
+        {id:"KTWF",name:"Twin Falls",lat:42.48,lon:-114.49},
+        {id:"KRNO",name:"Reno",lat:39.50,lon:-119.77},
+        {id:"KCYS",name:"Cheyenne",lat:41.16,lon:-104.81},
+        {id:"KCPR",name:"Casper",lat:42.91,lon:-106.46},
+        {id:"KRIW",name:"Riverton",lat:43.06,lon:-108.46},
+        {id:"KSHR",name:"Sheridan",lat:44.77,lon:-106.98},
+        {id:"KGPI",name:"Kalispell",lat:48.31,lon:-114.26},
+        {id:"KBZN",name:"Bozeman",lat:45.78,lon:-111.15},
+        {id:"KWYS",name:"West Yellowstone",lat:44.69,lon:-111.12},
+        {id:"KJAC",name:"Jackson Hole",lat:43.61,lon:-110.74},
+        {id:"KCOD",name:"Cody",lat:44.52,lon:-109.02},
+        {id:"KGDV",name:"Glendive",lat:47.14,lon:-104.81},
+        {id:"KMLS",name:"Miles City",lat:46.43,lon:-105.89},
+        {id:"KSDY",name:"Sidney MT",lat:47.71,lon:-104.19},
+        {id:"KOLF",name:"Wolf Point",lat:48.09,lon:-105.58},
+        {id:"KGGW",name:"Glasgow",lat:48.21,lon:-106.62},
+        {id:"KHVR",name:"Havre",lat:48.54,lon:-109.76},
+        {id:"KCTB",name:"Cut Bank",lat:48.61,lon:-112.38},
+        {id:"KFCA",name:"Kalispell",lat:48.31,lon:-114.26},
+        {id:"KMSO",name:"Missoula",lat:46.92,lon:-114.09},
+        {id:"KBTM",name:"Butte",lat:45.95,lon:-112.50},
+        {id:"KHLN",name:"Helena",lat:46.61,lon:-111.98},
+        {id:"KBIL",name:"Billings",lat:45.81,lon:-108.54},
+        {id:"KLWS",name:"Lewiston",lat:46.37,lon:-117.02},
+        {id:"KPUW",name:"Pullman",lat:46.74,lon:-117.11},
+        {id:"KALW",name:"Walla Walla",lat:46.09,lon:-118.29},
+        {id:"KPSC",name:"Pasco",lat:46.26,lon:-119.12},
+        {id:"KYKM",name:"Yakima",lat:46.57,lon:-120.54},
+        {id:"KELN",name:"Ellensburg",lat:47.03,lon:-120.53},
+        {id:"KEAT",name:"Wenatchee",lat:47.40,lon:-120.21},
+        {id:"KOMK",name:"Omak",lat:48.46,lon:-119.52},
+        {id:"KSFF",name:"Spokane Felts",lat:47.68,lon:-117.32},
+        {id:"KCOE",name:"Coeur d'Alene",lat:47.77,lon:-116.82},
+        {id:"KMLP",name:"Mullan Pass",lat:47.45,lon:-115.68},
+        {id:"KBDN",name:"Bend",lat:44.09,lon:-121.20},
+        {id:"KRDM",name:"Redmond OR",lat:44.25,lon:-121.15},
+        {id:"KOTH",name:"North Bend",lat:43.42,lon:-124.25},
+        {id:"KMFR",name:"Medford",lat:42.37,lon:-122.87},
+        {id:"KLMT",name:"Klamath Falls",lat:42.16,lon:-121.73},
+        {id:"KAAT",name:"Alturas",lat:41.48,lon:-120.56},
+        {id:"KRBL",name:"Red Bluff",lat:40.15,lon:-122.25},
+        {id:"KRDG",name:"Reading",lat:40.38,lon:-75.97},
+        {id:"KABE",name:"Allentown",lat:40.65,lon:-75.44},
+        {id:"KMDT",name:"Harrisburg",lat:40.19,lon:-76.76},
+        {id:"KCXY",name:"Capital City",lat:40.22,lon:-76.85},
+        {id:"KLNS",name:"Lancaster",lat:40.12,lon:-76.29},
+        {id:"KIPT",name:"Williamsport",lat:41.24,lon:-76.92},
+        {id:"KAVP",name:"Scranton",lat:41.34,lon:-75.72},
+        {id:"KBGM",name:"Binghamton",lat:42.21,lon:-75.98},
+        {id:"KSYR",name:"Syracuse",lat:43.11,lon:-76.11},
+        {id:"KROC",name:"Rochester",lat:43.12,lon:-77.67},
+        {id:"KIAG",name:"Niagara Falls",lat:43.11,lon:-78.95},
+        {id:"KART",name:"Watertown NY",lat:43.99,lon:-76.02},
+        {id:"KOGS",name:"Ogdensburg",lat:44.68,lon:-75.47},
+        {id:"KMSS",name:"Massena",lat:44.94,lon:-74.85},
+        {id:"KPBG",name:"Plattsburgh",lat:44.65,lon:-73.47},
+        {id:"KBTV",name:"Burlington",lat:44.47,lon:-73.15},
+        {id:"KMPV",name:"Montpelier",lat:44.20,lon:-72.56},
+        {id:"KRUT",name:"Rutland",lat:43.53,lon:-72.95},
+        {id:"KLEB",name:"Lebanon",lat:43.63,lon:-72.30},
+        {id:"KCON",name:"Concord",lat:43.20,lon:-71.50},
+        {id:"KMHT",name:"Manchester",lat:42.93,lon:-71.44},
+        {id:"KPSM",name:"Portsmouth",lat:43.08,lon:-70.82},
+        {id:"KPWM",name:"Portland ME",lat:43.65,lon:-70.31},
+        {id:"KAUG",name:"Augusta ME",lat:44.32,lon:-69.80},
+        {id:"KBGR",name:"Bangor",lat:44.81,lon:-68.83},
+        {id:"KPQI",name:"Presque Isle",lat:46.69,lon:-68.04},
+        {id:"KHUL",name:"Houlton",lat:46.12,lon:-67.79},
+        {id:"KCAR",name:"Caribou",lat:46.87,lon:-68.02}
     ];
-    
+
+    const CITIES = [
+        {name:"New York",lat:40.71,lon:-74.01,tier:1},
+        {name:"Los Angeles",lat:34.05,lon:-118.24,tier:1},
+        {name:"Chicago",lat:41.88,lon:-87.63,tier:1},
+        {name:"Houston",lat:29.76,lon:-95.37,tier:1},
+        {name:"Phoenix",lat:33.45,lon:-112.07,tier:1},
+        {name:"Philadelphia",lat:39.95,lon:-75.17,tier:1},
+        {name:"San Antonio",lat:29.42,lon:-98.49,tier:1},
+        {name:"San Diego",lat:32.72,lon:-117.16,tier:1},
+        {name:"Dallas",lat:32.78,lon:-96.80,tier:1},
+        {name:"San Jose",lat:37.34,lon:-121.89,tier:1},
+        {name:"Austin",lat:30.27,lon:-97.74,tier:1},
+        {name:"Jacksonville",lat:30.33,lon:-81.66,tier:1},
+        {name:"Columbus",lat:39.96,lon:-83.00,tier:1},
+        {name:"Charlotte",lat:35.23,lon:-80.84,tier:1},
+        {name:"Indianapolis",lat:39.77,lon:-86.16,tier:1},
+        {name:"San Francisco",lat:37.77,lon:-122.42,tier:1},
+        {name:"Seattle",lat:47.61,lon:-122.33,tier:1},
+        {name:"Denver",lat:39.74,lon:-104.99,tier:1},
+        {name:"Washington",lat:38.91,lon:-77.04,tier:1},
+        {name:"Boston",lat:42.36,lon:-71.06,tier:1},
+        {name:"Nashville",lat:36.16,lon:-86.78,tier:1},
+        {name:"Detroit",lat:42.33,lon:-83.05,tier:1},
+        {name:"Oklahoma City",lat:35.47,lon:-97.52,tier:1},
+        {name:"Portland",lat:45.52,lon:-122.68,tier:1},
+        {name:"Las Vegas",lat:36.17,lon:-115.14,tier:1},
+        {name:"Memphis",lat:35.15,lon:-90.05,tier:1},
+        {name:"Louisville",lat:38.25,lon:-85.76,tier:1},
+        {name:"Baltimore",lat:39.29,lon:-76.61,tier:1},
+        {name:"Milwaukee",lat:43.04,lon:-87.91,tier:1},
+        {name:"Albuquerque",lat:35.08,lon:-106.65,tier:1},
+        {name:"Tucson",lat:32.22,lon:-110.97,tier:1},
+        {name:"Atlanta",lat:33.75,lon:-84.39,tier:1},
+        {name:"Omaha",lat:41.26,lon:-95.94,tier:1},
+        {name:"Raleigh",lat:35.78,lon:-78.64,tier:1},
+        {name:"Miami",lat:25.76,lon:-80.19,tier:1},
+        {name:"Minneapolis",lat:44.98,lon:-93.27,tier:1},
+        {name:"Tulsa",lat:36.15,lon:-95.99,tier:1},
+        {name:"Tampa",lat:27.95,lon:-82.46,tier:1},
+        {name:"New Orleans",lat:29.95,lon:-90.07,tier:1},
+        {name:"Cleveland",lat:41.50,lon:-81.69,tier:1},
+        {name:"Salt Lake City",lat:40.76,lon:-111.89,tier:1},
+        {name:"Boise",lat:43.62,lon:-116.20,tier:1},
+        {name:"Spokane",lat:47.66,lon:-117.43,tier:1},
+        {name:"Billings",lat:45.78,lon:-108.50,tier:1},
+        {name:"St. Louis",lat:38.63,lon:-90.20,tier:1},
+        {name:"Cincinnati",lat:39.10,lon:-84.51,tier:1},
+        {name:"Pittsburgh",lat:40.44,lon:-79.99,tier:1},
+        {name:"Orlando",lat:28.54,lon:-81.38,tier:1},
+        {name:"Buffalo",lat:42.89,lon:-78.88,tier:1},
+        {name:"Richmond",lat:37.54,lon:-77.44,tier:1},
+        {name:"Birmingham",lat:33.52,lon:-86.81,tier:1},
+        {name:"Little Rock",lat:34.75,lon:-92.29,tier:1},
+        {name:"Des Moines",lat:41.59,lon:-93.62,tier:1},
+        {name:"Jackson",lat:32.30,lon:-90.18,tier:1},
+        {name:"Providence",lat:41.82,lon:-71.42,tier:1},
+        {name:"Honolulu",lat:21.31,lon:-157.86,tier:1},
+        {name:"Anchorage",lat:61.22,lon:-149.90,tier:1}
+    ];
+
+    // ============================================================
+    // STATE
+    // ============================================================
     let map, cityLayerGroup, tempLayerGroup, alertLayerGroup;
-    let radarLayer = null;
-    let satLayer = null;
-    let radarFrames = [];
-    let currentFrameIndex = 0;
-    let radarPlaying = false;
-    let radarTimer = null;
+    let radarLayer = null, satLayer = null;
+    let radarFrames = [], currentFrameIndex = 0, radarPlaying = false, radarTimer = null;
     let rainviewerHost = "https://tilecache.rainviewer.com";
-    
+    let tempFetchTimeout = null;
+
     function initMap() {
         map = L.map('map', {
             center: CONFIG.defaultCenter,
@@ -388,19 +388,23 @@
             minZoom: CONFIG.minZoom,
             maxZoom: CONFIG.maxZoom
         });
-        
+
         L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
-            attribution: 'Tiles &copy; Esri',
-            maxZoom: 19
+            attribution: 'Tiles &copy; Esri', maxZoom: 19
         }).addTo(map);
-        
+
         cityLayerGroup = L.layerGroup().addTo(map);
         tempLayerGroup = L.layerGroup().addTo(map);
         alertLayerGroup = L.layerGroup().addTo(map);
-        
+
         updateCityLabels();
-        map.on('zoomend', updateCityLabels);
-        
+        map.on('zoomend moveend', () => {
+            updateCityLabels();
+            // Debounce temperature reload when user stops moving
+            if (tempFetchTimeout) clearTimeout(tempFetchTimeout);
+            tempFetchTimeout = setTimeout(fetchTemperaturesForView, 600);
+        });
+
         document.getElementById('satSelect').addEventListener('change', updateSatellite);
         document.getElementById('radarSelect').addEventListener('change', () => {
             if (document.getElementById('radarSelect').value === 'off') {
@@ -408,42 +412,40 @@
                 if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
                 document.getElementById('radarStatus').textContent = 'Off';
                 document.getElementById('radarTime').textContent = 'Radar: Off';
-            } else {
-                loadRadarFrames(true);
-            }
+            } else loadRadarFrames(true);
         });
         document.getElementById('tempSelect').addEventListener('change', () => {
-            if (document.getElementById('tempSelect').value === 'on') fetchTemperatures();
+            if (document.getElementById('tempSelect').value === 'on') fetchTemperaturesForView();
             else { tempLayerGroup.clearLayers(); document.getElementById('tempStatus').textContent = 'Off'; }
         });
         document.getElementById('alertSelect').addEventListener('change', () => {
             if (document.getElementById('alertSelect').value === 'on') fetchAlerts();
-            else { 
-                alertLayerGroup.clearLayers(); 
+            else {
+                alertLayerGroup.clearLayers();
                 document.getElementById('alertBox').style.display = 'none';
-                document.getElementById('alertStatus').textContent = 'Off'; 
+                document.getElementById('alertStatus').textContent = 'Off';
             }
         });
-        
+
         document.getElementById('playBtn').addEventListener('click', startRadarLoop);
         document.getElementById('pauseBtn').addEventListener('click', stopRadarLoop);
         document.getElementById('refreshBtn').addEventListener('click', () => {
-            fetchTemperatures();
+            fetchTemperaturesForView();
             loadRadarFrames(true);
             fetchAlerts();
             updateSatellite();
         });
-        
-        fetchTemperatures();
+
+        fetchTemperaturesForView();
         loadRadarFrames(true);
         fetchAlerts();
         updateSatellite();
-        
-        setInterval(fetchTemperatures, CONFIG.tempRefreshMs);
+
+        setInterval(fetchTemperaturesForView, CONFIG.tempRefreshMs);
         setInterval(() => loadRadarFrames(false), CONFIG.radarRefreshMs);
         setInterval(fetchAlerts, CONFIG.alertRefreshMs);
     }
-    
+
     function updateCityLabels() {
         cityLayerGroup.clearLayers();
         const zoom = map.getZoom();
@@ -451,23 +453,45 @@
             if (city.tier === 1 || (city.tier === 2 && zoom >= 6)) {
                 const icon = L.divIcon({
                     className: 'city-label' + (city.tier === 1 ? ' major' : ''),
-                    html: city.name,
-                    iconSize: [0, 0],
-                    iconAnchor: [0, 0]
+                    html: city.name, iconSize: [0,0], iconAnchor: [0,0]
                 });
-                L.marker([city.lat, city.lon], {icon: icon, interactive: false}).addTo(cityLayerGroup);
+                L.marker([city.lat, city.lon], {icon, interactive:false}).addTo(cityLayerGroup);
             }
         });
     }
-    
-    async function fetchTemperatures() {
+
+    // ========== SMART TEMPERATURES (Option B) ==========
+    async function fetchTemperaturesForView() {
         if (document.getElementById('tempSelect').value !== 'on') return;
-        
+
         document.getElementById('tempStatus').textContent = 'Updating...';
         tempLayerGroup.clearLayers();
+
+        const bounds = map.getBounds();
+        // Slightly expand the bounds so edge stations still show
+        const padded = bounds.pad(0.15);
+
+        let candidates = STATIONS.filter(s => padded.contains([s.lat, s.lon]));
+
+        // Limit how many we fetch at once
+        if (candidates.length > CONFIG.maxTempsToFetch) {
+            // Prefer stations closer to center when over limit
+            const center = map.getCenter();
+            candidates.sort((a, b) => {
+                const da = Math.hypot(a.lat - center.lat, a.lon - center.lng);
+                const db = Math.hypot(b.lat - center.lat, b.lon - center.lng);
+                return da - db;
+            });
+            candidates = candidates.slice(0, CONFIG.maxTempsToFetch);
+        }
+
+        if (candidates.length === 0) {
+            document.getElementById('tempStatus').textContent = '0 in view';
+            return;
+        }
+
         let success = 0;
-        
-        const promises = STATIONS.map(async (station) => {
+        const promises = candidates.map(async (station) => {
             try {
                 const resp = await fetch(`https://api.weather.gov/stations/${station.id}/observations/latest`, {
                     headers: { 'User-Agent': CONFIG.userAgent, 'Accept': 'application/geo+json' }
@@ -476,13 +500,16 @@
                 const data = await resp.json();
                 const props = data.properties;
                 if (!props || props.temperature.value === null) return null;
-                
+
                 const tempC = props.temperature.value;
                 const tempF = Math.round(tempC * 9/5 + 32);
-                return { station, tempF, tempC: Math.round(tempC), timestamp: props.timestamp, text: props.textDescription || '' };
+                return {
+                    station, tempF, tempC: Math.round(tempC),
+                    timestamp: props.timestamp, text: props.textDescription || ''
+                };
             } catch(e) { return null; }
         });
-        
+
         const results = await Promise.all(promises);
         results.forEach(r => {
             if (!r) return;
@@ -492,145 +519,125 @@
             else if (r.tempF >= 70) cls += ' warm';
             else if (r.tempF >= 40) cls += ' cool';
             else cls += ' cold';
-            
-            const icon = L.divIcon({ className: cls, html: r.tempF + '°', iconSize: [34, 34], iconAnchor: [17, 17] });
+
+            const icon = L.divIcon({
+                className: cls, html: r.tempF + '°',
+                iconSize: [34,34], iconAnchor: [17,17]
+            });
             L.marker([r.station.lat, r.station.lon], {icon})
                 .bindPopup(`<strong>${r.station.name}</strong><br>${r.tempF}°F (${r.tempC}°C)<br>${r.text}<br><small>${new Date(r.timestamp).toLocaleString()}</small>`)
                 .addTo(tempLayerGroup);
         });
-        
-        document.getElementById('tempStatus').textContent = success + ' stations';
+
+        document.getElementById('tempStatus').textContent = success + ' in view';
         document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
     }
-    
-    async function loadRadarFrames(forceShow = false) {
+
+    // ========== RADAR + LOOP ==========
+    async function loadRadarFrames() {
         if (document.getElementById('radarSelect').value !== 'on') return;
-        
         try {
             const resp = await fetch('https://api.rainviewer.com/public/weather-maps.json');
             const api = await resp.json();
-            
-            if (!api.radar || !api.radar.past || api.radar.past.length === 0) {
+            if (!api.radar?.past?.length) {
                 document.getElementById('radarStatus').textContent = 'No data';
                 return;
             }
-            
             rainviewerHost = api.host || rainviewerHost;
             radarFrames = api.radar.past.slice(-CONFIG.radarFramesToKeep);
-            
             currentFrameIndex = radarFrames.length - 1;
             showRadarFrame(currentFrameIndex);
-            
             document.getElementById('radarStatus').textContent = radarFrames.length + ' frames';
             document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
         } catch(e) {
-            console.error(e);
             document.getElementById('radarStatus').textContent = 'Error';
         }
     }
-    
+
     function showRadarFrame(index) {
         if (!radarFrames.length) return;
         index = Math.max(0, Math.min(index, radarFrames.length - 1));
         currentFrameIndex = index;
-        
         const frame = radarFrames[index];
         const url = rainviewerHost + frame.path + '/256/{z}/{x}/{y}/2/1_1.png';
-        
         if (radarLayer) map.removeLayer(radarLayer);
-        
         radarLayer = L.tileLayer(url, {
-            opacity: CONFIG.radarOpacity,
-            zIndex: 200,
-            maxNativeZoom: 7,
-            maxZoom: 12
+            opacity: CONFIG.radarOpacity, zIndex: 200, maxNativeZoom: 7, maxZoom: 12
         }).addTo(map);
-        
-        const timeStr = new Date(frame.time * 1000).toLocaleTimeString();
-        document.getElementById('radarTime').textContent = 'Radar: ' + timeStr;
-        document.getElementById('radarStatus').textContent = (index + 1) + '/' + radarFrames.length;
+        document.getElementById('radarTime').textContent = 'Radar: ' + new Date(frame.time * 1000).toLocaleTimeString();
+        document.getElementById('radarStatus').textContent = (index+1) + '/' + radarFrames.length;
     }
-    
+
     function startRadarLoop() {
         if (radarPlaying || radarFrames.length < 2) return;
         radarPlaying = true;
         document.getElementById('playBtn').style.opacity = '0.5';
-        
         radarTimer = setInterval(() => {
             currentFrameIndex = (currentFrameIndex + 1) % radarFrames.length;
             showRadarFrame(currentFrameIndex);
         }, 700);
     }
-    
+
     function stopRadarLoop() {
         radarPlaying = false;
         if (radarTimer) clearInterval(radarTimer);
         radarTimer = null;
         document.getElementById('playBtn').style.opacity = '1';
     }
-    
+
+    // ========== ALERTS ==========
     async function fetchAlerts() {
         if (document.getElementById('alertSelect').value !== 'on') return;
-        
         document.getElementById('alertStatus').textContent = 'Updating...';
         alertLayerGroup.clearLayers();
-        
         try {
             const resp = await fetch('https://api.weather.gov/alerts/active?status=actual&message_type=alert', {
                 headers: { 'User-Agent': CONFIG.userAgent, 'Accept': 'application/geo+json' }
             });
-            if (!resp.ok) throw new Error('Alert fetch failed');
+            if (!resp.ok) throw new Error('fail');
             const data = await resp.json();
-            
             const features = data.features || [];
-            let shown = 0;
-            
             const important = features.filter(f => {
-                const event = (f.properties.event || '').toLowerCase();
-                return event.includes('warning') || event.includes('watch') || 
-                       event.includes('tornado') || event.includes('severe') ||
-                       event.includes('hurricane') || event.includes('blizzard');
+                const e = (f.properties.event || '').toLowerCase();
+                return e.includes('warning') || e.includes('watch') || e.includes('tornado') ||
+                       e.includes('severe') || e.includes('hurricane') || e.includes('blizzard');
             }).slice(0, 40);
-            
+
+            let shown = 0;
             important.forEach(f => {
                 try {
                     if (!f.geometry) return;
                     const props = f.properties;
                     const color = (props.event || '').toLowerCase().includes('warning') ? '#ef4444' : '#f59e0b';
-                    
-                    const layer = L.geoJSON(f.geometry, {
-                        style: { color: color, weight: 2, opacity: 0.8, fillOpacity: 0.15 }
-                    }).bindPopup(`<strong>${props.event}</strong><br>${props.headline || ''}<br><small>${props.areaDesc || ''}</small>`);
-                    
-                    layer.addTo(alertLayerGroup);
+                    L.geoJSON(f.geometry, {
+                        style: { color, weight: 2, opacity: 0.8, fillOpacity: 0.15 }
+                    }).bindPopup(`<strong>${props.event}</strong><br>${props.headline || ''}<br><small>${props.areaDesc || ''}</small>`)
+                      .addTo(alertLayerGroup);
                     shown++;
                 } catch(e) {}
             });
-            
+
             const box = document.getElementById('alertBox');
             if (important.length > 0) {
                 box.style.display = 'block';
-                box.innerHTML = '<strong>Active Alerts</strong><br>' + 
-                    important.slice(0, 8).map(f => 
-                        `<div class="alert-item">${f.properties.event}<br><small>${(f.properties.areaDesc || '').substring(0, 60)}...</small></div>`
+                box.innerHTML = '<strong>Active Alerts</strong><br>' +
+                    important.slice(0, 8).map(f =>
+                        `<div class="alert-item">${f.properties.event}<br><small>${(f.properties.areaDesc||'').substring(0,60)}...</small></div>`
                     ).join('');
-            } else {
-                box.style.display = 'none';
-            }
-            
+            } else box.style.display = 'none';
+
             document.getElementById('alertStatus').textContent = shown + ' shown';
             document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
         } catch(e) {
-            console.error(e);
             document.getElementById('alertStatus').textContent = 'Error';
         }
     }
-    
+
+    // ========== SATELLITE ==========
     function updateSatellite() {
         const choice = document.getElementById('satSelect').value;
         if (satLayer) { map.removeLayer(satLayer); satLayer = null; }
         if (choice === 'none') return;
-        
         let wmsUrl, layers;
         if (choice === 'visible') {
             wmsUrl = 'https://mesonet.agron.iastate.edu/cgi-bin/wms/goes/conus_vis.cgi?';
@@ -639,17 +646,12 @@
             wmsUrl = 'https://mesonet.agron.iastate.edu/cgi-bin/wms/goes/conus_ir.cgi?';
             layers = 'conus_ir_4km';
         }
-        
         satLayer = L.tileLayer.wms(wmsUrl, {
-            layers: layers,
-            format: 'image/png',
-            transparent: true,
-            opacity: CONFIG.satelliteOpacity,
-            attribution: 'Satellite © Iowa State / NOAA GOES',
-            zIndex: 100
+            layers, format: 'image/png', transparent: true,
+            opacity: CONFIG.satelliteOpacity, attribution: 'Satellite © Iowa State / NOAA GOES', zIndex: 100
         }).addTo(map);
     }
-    
+
     document.addEventListener('DOMContentLoaded', initMap);
     </script>
 </body>
