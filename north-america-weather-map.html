@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>North America Live Weather Map - NWS Temps + Radar + Satellite</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9SMk=" 
+          crossorigin=""/>
+    
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #1a1a2e; 
+            color: #eee;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #map { 
+            width: 100%; 
+            height: 100%; 
+            background: #0f172a;
+        }
+        
+        /* Control Panel */
+        .control-panel {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 1000;
+            background: rgba(15, 23, 42, 0.92);
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 14px 16px;
+            width: 280px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            backdrop-filter: blur(8px);
+        }
+        .control-panel h2 {
+            font-size: 15px;
+            margin-bottom: 12px;
+            color: #38bdf8;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .control-group {
+            margin-bottom: 12px;
+        }
+        .control-group label {
+            display: block;
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 4px;
+            font-weight: 500;
+        }
+        select, button {
+            width: 100%;
+            padding: 7px 10px;
+            border-radius: 6px;
+            border: 1px solid #475569;
+            background: #1e293b;
+            color: #f1f5f9;
+            font-size: 13px;
+            cursor: pointer;
+        }
+        select:hover, button:hover {
+            border-color: #38bdf8;
+        }
+        button {
+            background: #0ea5e9;
+            border-color: #0ea5e9;
+            font-weight: 600;
+            margin-top: 4px;
+        }
+        button:hover {
+            background: #0284c7;
+        }
+        .status {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 10px;
+            line-height: 1.4;
+            border-top: 1px solid #334155;
+            padding-top: 8px;
+        }
+        .status span {
+            color: #22c55e;
+        }
+        
+        /* Temperature markers */
+        .temp-marker {
+            background: rgba(15, 23, 42, 0.85);
+            border: 2px solid #38bdf8;
+            border-radius: 50%;
+            color: #fff;
+            font-weight: 700;
+            font-size: 12px;
+            text-align: center;
+            line-height: 28px;
+            width: 32px !important;
+            height: 32px !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+        }
+        .temp-marker.hot { border-color: #ef4444; background: rgba(127, 29, 29, 0.9); }
+        .temp-marker.warm { border-color: #f97316; }
+        .temp-marker.cool { border-color: #3b82f6; }
+        .temp-marker.cold { border-color: #06b6d4; background: rgba(8, 47, 73, 0.9); }
+        
+        /* City labels */
+        .city-label {
+            background: transparent;
+            border: none;
+            color: #e2e8f0;
+            font-weight: 600;
+            font-size: 11px;
+            text-shadow: 0 0 4px #000, 0 0 4px #000, 1px 1px 2px #000;
+            white-space: nowrap;
+        }
+        .city-label.major {
+            font-size: 13px;
+            font-weight: 700;
+            color: #f8fafc;
+        }
+        
+        /* Legend */
+        .legend {
+            position: absolute;
+            bottom: 24px;
+            left: 12px;
+            z-index: 1000;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 11px;
+            color: #94a3b8;
+        }
+        
+        /* Attribution tweak */
+        .leaflet-control-attribution {
+            background: rgba(15, 23, 42, 0.8) !important;
+            color: #64748b !important;
+            font-size: 10px !important;
+        }
+        .leaflet-control-attribution a { color: #38bdf8 !important; }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="control-panel">
+        <h2>🌤 Live Weather Map</h2>
+        
+        <div class="control-group">
+            <label>Satellite Layer</label>
+            <select id="satSelect">
+                <option value="none">None</option>
+                <option value="visible">Visible (Day Clouds)</option>
+                <option value="infrared">Infrared (Cloud Tops)</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label>Radar Overlay</label>
+            <select id="radarSelect">
+                <option value="on" selected>On (Auto-refresh)</option>
+                <option value="off">Off</option>
+            </select>
+        </div>
+        
+        <div class="control-group">
+            <label>Temperature Markers</label>
+            <select id="tempSelect">
+                <option value="on" selected>On (NWS Live)</option>
+                <option value="off">Off</option>
+            </select>
+        </div>
+        
+        <button id="refreshBtn">↻ Refresh All Data Now</button>
+        
+        <div class="status">
+            <div>Temps: <span id="tempStatus">Loading...</span></div>
+            <div>Radar: <span id="radarStatus">Loading...</span></div>
+            <div>Last update: <span id="lastUpdate">—</span></div>
+            <div style="margin-top:6px;font-size:10px;color:#475569;">
+                Data: NWS + RainViewer + Iowa State Mesonet<br>
+                Future-proof: Edit the CONFIG section at the top of the script.
+            </div>
+        </div>
+    </div>
+    
+    <div class="legend">
+        Zoom in to see more cities • Click temp circles for details
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" 
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" 
+            crossorigin=""></script>
+    
+    <script>
+    // ============================================================
+    // CONFIGURATION - Easy to edit for future updates / new ideas
+    // ============================================================
+    const CONFIG = {
+        // Map starting view (North America)
+        defaultCenter: [39.8, -98.5],
+        defaultZoom: 4,
+        minZoom: 3,
+        maxZoom: 12,
+        
+        // How often to auto-refresh (milliseconds)
+        tempRefreshMs: 5 * 60 * 1000,   // 5 minutes for temperatures
+        radarRefreshMs: 3 * 60 * 1000,  // 3 minutes for radar/satellite
+        
+        // NWS requires a descriptive User-Agent
+        userAgent: "NorthAmericaWeatherMap/1.0 (personal educational use; github.com/yourusername)",
+        
+        // Opacity settings
+        radarOpacity: 0.65,
+        satelliteOpacity: 0.55
+    };
+    
+    // ============================================================
+    // CITY DATA - Progressive labels (tier 1 = always, higher = zoom in)
+    // Add more cities here anytime. tier: 1=major, 2=large, 3=medium
+    // ============================================================
+    const CITIES = [
+        // Tier 1 - Major (always visible at low zoom)
+        {name:"New York", lat:40.71, lon:-74.01, tier:1},
+        {name:"Los Angeles", lat:34.05, lon:-118.24, tier:1},
+        {name:"Chicago", lat:41.88, lon:-87.63, tier:1},
+        {name:"Houston", lat:29.76, lon:-95.37, tier:1},
+        {name:"Phoenix", lat:33.45, lon:-112.07, tier:1},
+        {name:"Philadelphia", lat:39.95, lon:-75.17, tier:1},
+        {name:"San Antonio", lat:29.42, lon:-98.49, tier:1},
+        {name:"San Diego", lat:32.72, lon:-117.16, tier:1},
+        {name:"Dallas", lat:32.78, lon:-96.80, tier:1},
+        {name:"San Jose", lat:37.34, lon:-121.89, tier:1},
+        {name:"Austin", lat:30.27, lon:-97.74, tier:1},
+        {name:"Jacksonville", lat:30.33, lon:-81.66, tier:1},
+        {name:"Fort Worth", lat:32.76, lon:-97.33, tier:1},
+        {name:"Columbus", lat:39.96, lon:-83.00, tier:1},
+        {name:"Charlotte", lat:35.23, lon:-80.84, tier:1},
+        {name:"Indianapolis", lat:39.77, lon:-86.16, tier:1},
+        {name:"San Francisco", lat:37.77, lon:-122.42, tier:1},
+        {name:"Seattle", lat:47.61, lon:-122.33, tier:1},
+        {name:"Denver", lat:39.74, lon:-104.99, tier:1},
+        {name:"Washington", lat:38.91, lon:-77.04, tier:1},
+        {name:"Boston", lat:42.36, lon:-71.06, tier:1},
+        {name:"El Paso", lat:31.76, lon:-106.49, tier:1},
+        {name:"Nashville", lat:36.16, lon:-86.78, tier:1},
+        {name:"Detroit", lat:42.33, lon:-83.05, tier:1},
+        {name:"Oklahoma City", lat:35.47, lon:-97.52, tier:1},
+        {name:"Portland", lat:45.52, lon:-122.68, tier:1},
+        {name:"Las Vegas", lat:36.17, lon:-115.14, tier:1},
+        {name:"Memphis", lat:35.15, lon:-90.05, tier:1},
+        {name:"Louisville", lat:38.25, lon:-85.76, tier:1},
+        {name:"Baltimore", lat:39.29, lon:-76.61, tier:1},
+        {name:"Milwaukee", lat:43.04, lon:-87.91, tier:1},
+        {name:"Albuquerque", lat:35.08, lon:-106.65, tier:1},
+        {name:"Tucson", lat:32.22, lon:-110.97, tier:1},
+        {name:"Fresno", lat:36.74, lon:-119.77, tier:1},
+        {name:"Sacramento", lat:38.58, lon:-121.49, tier:1},
+        {name:"Kansas City", lat:39.10, lon:-94.58, tier:1},
+        {name:"Mesa", lat:33.42, lon:-111.83, tier:1},
+        {name:"Atlanta", lat:33.75, lon:-84.39, tier:1},
+        {name:"Omaha", lat:41.26, lon:-95.94, tier:1},
+        {name:"Colorado Springs", lat:38.83, lon:-104.82, tier:1},
+        {name:"Raleigh", lat:35.78, lon:-78.64, tier:1},
+        {name:"Miami", lat:25.76, lon:-80.19, tier:1},
+        {name:"Virginia Beach", lat:36.85, lon:-75.98, tier:1},
+        {name:"Oakland", lat:37.80, lon:-122.27, tier:1},
+        {name:"Minneapolis", lat:44.98, lon:-93.27, tier:1},
+        {name:"Tulsa", lat:36.15, lon:-95.99, tier:1},
+        {name:"Tampa", lat:27.95, lon:-82.46, tier:1},
+        {name:"New Orleans", lat:29.95, lon:-90.07, tier:1},
+        {name:"Wichita", lat:37.69, lon:-97.34, tier:1},
+        {name:"Cleveland", lat:41.50, lon:-81.69, tier:1},
+        {name:"Bakersfield", lat:35.37, lon:-119.02, tier:1},
+        {name:"Aurora", lat:39.73, lon:-104.83, tier:1},
+        {name:"Anaheim", lat:33.84, lon:-117.91, tier:1},
+        {name:"Honolulu", lat:21.31, lon:-157.86, tier:1},
+        {name:"Santa Ana", lat:33.75, lon:-117.87, tier:1},
+        {name:"Riverside", lat:33.95, lon:-117.40, tier:1},
+        {name:"Corpus Christi", lat:27.80, lon:-97.40, tier:1},
+        {name:"Lexington", lat:38.04, lon:-84.50, tier:1},
+        {name:"Henderson", lat:36.04, lon:-114.98, tier:1},
+        {name:"Stockton", lat:37.96, lon:-121.29, tier:1},
+        {name:"Saint Paul", lat:44.95, lon:-93.09, tier:1},
+        {name:"St. Louis", lat:38.63, lon:-90.20, tier:1},
+        {name:"Cincinnati", lat:39.10, lon:-84.51, tier:1},
+        {name:"Pittsburgh", lat:40.44, lon:-79.99, tier:1},
+        {name:"Greensboro", lat:36.07, lon:-79.79, tier:1},
+        {name:"Anchorage", lat:61.22, lon:-149.90, tier:1},
+        {name:"Plano", lat:33.02, lon:-96.70, tier:1},
+        {name:"Lincoln", lat:40.81, lon:-96.68, tier:1},
+        {name:"Orlando", lat:28.54, lon:-81.38, tier:1},
+        {name:"Irvine", lat:33.68, lon:-117.83, tier:1},
+        {name:"Newark", lat:40.74, lon:-74.17, tier:1},
+        {name:"Toledo", lat:41.66, lon:-83.56, tier:1},
+        {name:"Durham", lat:35.99, lon:-78.90, tier:1},
+        {name:"Chula Vista", lat:32.64, lon:-117.08, tier:1},
+        {name:"Fort Wayne", lat:41.08, lon:-85.14, tier:1},
+        {name:"Jersey City", lat:40.72, lon:-74.07, tier:1},
+        {name:"St. Petersburg", lat:27.77, lon:-82.64, tier:1},
+        {name:"Laredo", lat:27.50, lon:-99.51, tier:1},
+        {name:"Madison", lat:43.07, lon:-89.40, tier:1},
+        {name:"Chandler", lat:33.31, lon:-111.84, tier:1},
+        {name:"Buffalo", lat:42.89, lon:-78.88, tier:1},
+        {name:"Lubbock", lat:33.58, lon:-101.86, tier:1},
+        {name:"Scottsdale", lat:33.49, lon:-111.93, tier:1},
+        {name:"Reno", lat:39.53, lon:-119.81, tier:1},
+        {name:"Glendale", lat:33.54, lon:-112.19, tier:1},
+        {name:"Gilbert", lat:33.35, lon:-111.79, tier:1},
+        {name:"Winston-Salem", lat:36.10, lon:-80.24, tier:1},
+        {name:"North Las Vegas", lat:36.20, lon:-115.12, tier:1},
+        {name:"Norfolk", lat:36.85, lon:-76.29, tier:1},
+        {name:"Chesapeake", lat:36.77, lon:-76.29, tier:1},
+        {name:"Garland", lat:32.91, lon:-96.64, tier:1},
+        {name:"Irving", lat:32.81, lon:-96.95, tier:1},
+        {name:"Hialeah", lat:25.86, lon:-80.29, tier:1},
+        {name:"Fremont", lat:37.55, lon:-121.99, tier:1},
+        {name:"Boise", lat:43.62, lon:-116.20, tier:1},
+        {name:"Richmond", lat:37.54, lon:-77.44, tier:1},
+        {name:"Baton Rouge", lat:30.45, lon:-91.19, tier:1},
+        {name:"Spokane", lat:47.66, lon:-117.43, tier:1},
+        {name:"Des Moines", lat:41.59, lon:-93.62, tier:1},
+        {name:"Tacoma", lat:47.25, lon:-122.44, tier:1},
+        {name:"San Bernardino", lat:34.11, lon:-117.29, tier:1},
+        {name:"Modesto", lat:37.64, lon:-120.99, tier:1},
+        {name:"Fontana", lat:34.09, lon:-117.44, tier:1},
+        {name:"Santa Clarita", lat:34.39, lon:-118.54, tier:1},
+        {name:"Birmingham", lat:33.52, lon:-86.81, tier:1},
+        {name:"Oxnard", lat:34.20, lon:-119.18, tier:1},
+        {name:"Fayetteville", lat:35.05, lon:-78.88, tier:1},
+        {name:"Rochester", lat:43.16, lon:-77.61, tier:1},
+        {name:"Akron", lat:41.08, lon:-81.52, tier:1},
+        {name:"Grand Rapids", lat:42.96, lon:-85.67, tier:1},
+        {name:"Yonkers", lat:40.93, lon:-73.90, tier:1},
+        {name:"Huntsville", lat:34.73, lon:-86.59, tier:1},
+        {name:"Salt Lake City", lat:40.76, lon:-111.89, tier:1},
+        {name:"Amarillo", lat:35.22, lon:-101.83, tier:1},
+        {name:"Montgomery", lat:32.37, lon:-86.30, tier:1},
+        {name:"Little Rock", lat:34.75, lon:-92.29, tier:1},
+        {name:"Tallahassee", lat:30.44, lon:-84.28, tier:1},
+        {name:"Grand Prairie", lat:32.75, lon:-97.00, tier:1},
+        {name:"Columbus", lat:32.46, lon:-84.99, tier:1},
+        {name:"Overland Park", lat:38.98, lon:-94.67, tier:1},
+        {name:"Knoxville", lat:35.96, lon:-83.92, tier:1},
+        {name:"Worcester", lat:42.26, lon:-71.80, tier:1},
+        {name:"Newport News", lat:37.09, lon:-76.47, tier:1},
+        {name:"Brownsville", lat:25.90, lon:-97.50, tier:1},
+        {name:"Santa Rosa", lat:38.44, lon:-122.71, tier:1},
+        {name:"Port St. Lucie", lat:27.27, lon:-80.36, tier:1},
+        {name:"Jackson", lat:32.30, lon:-90.18, tier:1},
+        {name:"Mobile", lat:30.69, lon:-88.04, tier:1},
+        {name:"Chattanooga", lat:35.05, lon:-85.31, tier:1},
+        {name:"Providence", lat:41.82, lon:-71.42, tier:1},
+        {name:"Fort Lauderdale", lat:26.12, lon:-80.14, tier:1},
+        {name:"Shreveport", lat:32.53, lon:-93.75, tier:1},
+        {name:"Akron", lat:41.08, lon:-81.52, tier:1},
+        {name:"Sioux Falls", lat:43.54, lon:-96.73, tier:1},
+        {name:"Fargo", lat:46.88, lon:-96.79, tier:1},
+        {name:"Billings", lat:45.78, lon:-108.50, tier:1},
+        {name:"Missoula", lat:46.87, lon:-114.00, tier:1},
+        {name:"Boise", lat:43.62, lon:-116.20, tier:1},
+        {name:"Cheyenne", lat:41.14, lon:-104.82, tier:1},
+        {name:"Casper", lat:42.87, lon:-106.31, tier:1},
+        {name:"Rapid City", lat:44.08, lon:-103.23, tier:1},
+        {name:"Great Falls", lat:47.50, lon:-111.30, tier:1},
+        {name:"Helena", lat:46.59, lon:-112.04, tier:1},
+        {name:"Juneau", lat:58.30, lon:-134.42, tier:1},
+        {name:"Fairbanks", lat:64.84, lon:-147.72, tier:1},
+        
+        // Tier 2 - Appear at zoom >= 6
+        {name:"Boulder", lat:40.02, lon:-105.27, tier:2},
+        {name:"Ann Arbor", lat:42.28, lon:-83.74, tier:2},
+        {name:"Asheville", lat:35.60, lon:-82.55, tier:2},
+        {name:"Savannah", lat:32.08, lon:-81.09, tier:2},
+        {name:"Charleston", lat:32.78, lon:-79.93, tier:2},
+        {name:"Key West", lat:24.56, lon:-81.78, tier:2},
+        {name:"Flagstaff", lat:35.20, lon:-111.65, tier:2},
+        {name:"Moab", lat:38.57, lon:-109.55, tier:2},
+        {name:"Jackson Hole", lat:43.48, lon:-110.76, tier:2},
+        {name:"Bar Harbor", lat:44.39, lon:-68.20, tier:2},
+        {name:"Burlington", lat:44.48, lon:-73.21, tier:2},
+        {name:"Portland ME", lat:43.66, lon:-70.26, tier:2},
+        {name:"Concord NH", lat:43.21, lon:-71.54, tier:2},
+        {name:"Montpelier", lat:44.26, lon:-72.58, tier:2},
+        {name:"Augusta", lat:44.31, lon:-69.78, tier:2},
+        {name:"Hartford", lat:41.76, lon:-72.69, tier:2},
+        {name:"Albany", lat:42.65, lon:-73.76, tier:2},
+        {name:"Harrisburg", lat:40.27, lon:-76.89, tier:2},
+        {name:"Trenton", lat:40.22, lon:-74.76, tier:2},
+        {name:"Dover", lat:39.16, lon:-75.52, tier:2},
+        {name:"Annapolis", lat:38.98, lon:-76.49, tier:2},
+        {name:"Richmond", lat:37.54, lon:-77.44, tier:2},
+        {name:"Roanoke", lat:37.27, lon:-79.94, tier:2},
+        {name:"Charlottesville", lat:38.03, lon:-78.48, tier:2},
+        {name:"Wilmington NC", lat:34.23, lon:-77.94, tier:2},
+        {name:"Myrtle Beach", lat:33.69, lon:-78.89, tier:2},
+        {name:"Hilton Head", lat:32.22, lon:-80.75, tier:2},
+        {name:"Pensacola", lat:30.42, lon:-87.22, tier:2},
+        {name:"Mobile", lat:30.69, lon:-88.04, tier:2},
+        {name:"Gulfport", lat:30.37, lon:-89.09, tier:2},
+        {name:"Biloxi", lat:30.40, lon:-88.89, tier:2},
+        {name:"Hattiesburg", lat:31.33, lon:-89.29, tier:2},
+        {name:"Tupelo", lat:34.26, lon:-88.70, tier:2},
+        {name:"Oxford MS", lat:34.37, lon:-89.52, tier:2},
+        {name:"Hot Springs", lat:34.50, lon:-93.05, tier:2},
+        {name:"Fayetteville AR", lat:36.06, lon:-94.16, tier:2},
+        {name:"Springdale", lat:36.19, lon:-94.13, tier:2},
+        {name:"Joplin", lat:37.08, lon:-94.51, tier:2},
+        {name:"Springfield MO", lat:37.21, lon:-93.29, tier:2},
+        {name:"Columbia MO", lat:38.95, lon:-92.33, tier:2},
+        {name:"Jefferson City", lat:38.58, lon:-92.17, tier:2},
+        {name:"Topeka", lat:39.05, lon:-95.68, tier:2},
+        {name:"Lawrence", lat:38.97, lon:-95.24, tier:2},
+        {name:"Manhattan KS", lat:39.18, lon:-96.57, tier:2},
+        {name:"Salina", lat:38.84, lon:-97.61, tier:2},
+        {name:"Garden City", lat:37.97, lon:-100.87, tier:2},
+        {name:"Dodge City", lat:37.75, lon:-100.02, tier:2},
+        {name:"Liberal", lat:37.04, lon:-100.92, tier:2},
+        {name:"Guymon", lat:36.68, lon:-101.48, tier:2},
+        {name:"Stillwater", lat:36.12, lon:-97.06, tier:2},
+        {name:"Norman", lat:35.22, lon:-97.44, tier:2},
+        {name:"Lawton", lat:34.61, lon:-98.39, tier:2},
+        {name:"Enid", lat:36.40, lon:-97.88, tier:2},
+        {name:"Ponca City", lat:36.71, lon:-97.09, tier:2},
+        {name:"Bartlesville", lat:36.75, lon:-95.98, tier:2},
+        {name:"Muskogee", lat:35.75, lon:-95.37, tier:2},
+        {name:"McAlester", lat:34.93, lon:-95.77, tier:2},
+        {name:"Ardmore", lat:34.17, lon:-97.14, tier:2},
+        {name:"Durant", lat:33.99, lon:-96.40, tier:2},
+        {name:"Sherman", lat:33.64, lon:-96.61, tier:2},
+        {name:"Paris TX", lat:33.66, lon:-95.56, tier:2},
+        {name:"Texarkana", lat:33.43, lon:-94.05, tier:2},
+        {name:"Longview", lat:32.50, lon:-94.74, tier:2},
+        {name:"Tyler", lat:32.35, lon:-95.30, tier:2},
+        {name:"Lufkin", lat:31.34, lon:-94.73, tier:2},
+        {name:"Nacogdoches", lat:31.60, lon:-94.66, tier:2},
+        {name:"College Station", lat:30.63, lon:-96.33, tier:2},
+        {name:"Bryan", lat:30.67, lon:-96.37, tier:2},
+        {name:"Waco", lat:31.55, lon:-97.15, tier:2},
+        {name:"Temple", lat:31.10, lon:-97.34, tier:2},
+        {name:"Killeen", lat:31.12, lon:-97.73, tier:2},
+        {name:"Round Rock", lat:30.51, lon:-97.68, tier:2},
+        {name:"Georgetown", lat:30.63, lon:-97.68, tier:2},
+        {name:"San Marcos", lat:29.88, lon:-97.94, tier:2},
+        {name:"New Braunfels", lat:29.70, lon:-98.12, tier:2},
+        {name:"Seguin", lat:29.57, lon:-97.96, tier:2},
+        {name:"Victoria", lat:28.80, lon:-97.00, tier:2},
+        {name:"Corpus Christi", lat:27.80, lon:-97.40, tier:2},
+        {name:"Kingsville", lat:27.52, lon:-97.86, tier:2},
+        {name:"Alice", lat:27.74, lon:-98.07, tier:2},
+        {name:"Laredo", lat:27.50, lon:-99.51, tier:2},
+        {name:"Eagle Pass", lat:28.71, lon:-100.50, tier:2},
+        {name:"Del Rio", lat:29.37, lon:-100.90, tier:2},
+        {name:"Uvalde", lat:29.21, lon:-99.79, tier:2},
+        {name:"San Angelo", lat:31.46, lon:-100.44, tier:2},
+        {name:"Abilene", lat:32.45, lon:-99.73, tier:2},
+        {name:"Midland", lat:31.84, lon:-102.08, tier:2},
+        {name:"Odessa", lat:31.85, lon:-102.37, tier:2},
+        {name:"Big Spring", lat:32.25, lon:-101.48, tier:2},
+        {name:"Lubbock", lat:33.58, lon:-101.86, tier:2},
+        {name:"Amarillo", lat:35.22, lon:-101.83, tier:2},
+        {name:"Pampa", lat:35.54, lon:-100.96, tier:2},
+        {name:"Borger", lat:35.67, lon:-101.40, tier:2},
+        {name:"Dumas", lat:35.87, lon:-101.97, tier:2},
+        {name:"Dalhart", lat:36.06, lon:-102.51, tier:2},
+        {name:"Hereford", lat:34.82, lon:-102.40, tier:2},
+        {name:"Clovis NM", lat:34.40, lon:-103.21, tier:2},
+        {name:"Roswell", lat:33.39, lon:-104.52, tier:2},
+        {name:"Carlsbad NM", lat:32.42, lon:-104.23, tier:2},
+        {name:"Hobbs", lat:32.70, lon:-103.14, tier:2},
+        {name:"Las Cruces", lat:32.32, lon:-106.78, tier:2},
+        {name:"Alamogordo", lat:32.90, lon:-105.96, tier:2},
+        {name:"Silver City", lat:32.77, lon:-108.28, tier:2},
+        {name:"Gallup", lat:35.53, lon:-108.74, tier:2},
+        {name:"Farmington", lat:36.73, lon:-108.21, tier:2},
+        {name:"Durango", lat:37.28, lon:-107.88, tier:2},
+        {name:"Grand Junction", lat:39.07, lon:-108.55, tier:2},
+        {name:"Montrose", lat:38.48, lon:-107.88, tier:2},
+        {name:"Gunnison", lat:38.55, lon:-106.93, tier:2},
+        {name:"Aspen", lat:39.19, lon:-106.82, tier:2},
+        {name:"Vail", lat:39.64, lon:-106.37, tier:2},
+        {name:"Steamboat Springs", lat:40.49, lon:-106.83, tier:2},
+        {name:"Fort Collins", lat:40.59, lon:-105.08, tier:2},
+        {name:"Greeley", lat:40.42, lon:-104.71, tier:2},
+        {name:"Loveland", lat:40.40, lon:-105.07, tier:2},
+        {name:"Longmont", lat:40.17, lon:-105.10, tier:2},
+        {name:"Boulder", lat:40.02, lon:-105.27, tier:2},
+        {name:"Golden", lat:39.76, lon:-105.22, tier:2},
+        {name:"Lakewood", lat:39.70, lon:-105.08, tier:2},
+        {name:"Arvada", lat:39.80, lon:-105.09, tier:2},
+        {name:"Westminster", lat:39.84, lon:-105.04, tier:2},
+        {name:"Thornton", lat:39.87, lon:-104.97, tier:2},
+        {name:"Aurora", lat:39.73, lon:-104.83, tier:2},
+        {name:"Centennial", lat:39.58, lon:-104.88, tier:2},
+        {name:"Parker", lat:39.52, lon:-104.76, tier:2},
+        {name:"Castle Rock", lat:39.37, lon:-104.86, tier:2},
+        {name:"Pueblo", lat:38.25, lon:-104.61, tier:2},
+        {name:"Canon City", lat:38.44, lon:-105.24, tier:2},
+        {name:"Salida", lat:38.53, lon:-106.00, tier:2},
+        {name:"Leadville", lat:39.25, lon:-106.29, tier:2},
+        {name:"Breckenridge", lat:39.48, lon:-106.04, tier:2},
+        {name:"Frisco", lat:39.57, lon:-106.10, tier:2},
+        {name:"Silverthorne", lat:39.64, lon:-106.07, tier:2},
+        {name:"Dillon", lat:39.63, lon:-106.04, tier:2},
+        {name:"Keystone", lat:39.61, lon:-105.95, tier:2},
+        {name:"Copper Mountain", lat:39.50, lon:-106.15, tier:2},
+        {name:"Winter Park", lat:39.89, lon:-105.76, tier:2},
+        {name:"Granby", lat:40.09, lon:-105.94, tier:2},
+        {name:"Craig", lat:40.52, lon:-107.55, tier:2},
+        {name:"Meeker", lat:40.04, lon:-107.91, tier:2},
+        {name:"Rangely", lat:40.09, lon:-108.80, tier:2},
+        {name:"Dinosaur", lat:40.24, lon:-109.03, tier:2},
+        {name:"Vernal", lat:40.46, lon:-109.53, tier:2},
+        {name:"Roosevelt", lat:40.30, lon:-109.99, tier:2},
+        {name:"Price", lat:39.60, lon:-110.81, tier:2},
+        {name:"Moab", lat:38.57, lon:-109.55, tier:2},
+        {name:"Monticello", lat:37.87, lon:-109.34, tier:2},
+        {name:"Blanding", lat:37.62, lon:-109.48, tier:2},
+        {name:"Bluff", lat:37.28, lon:-109.55, tier:2},
+        {name:"Mexican Hat", lat:37.15, lon:-109.87, tier:2},
+        {name:"Kayenta", lat:36.72, lon:-110.25, tier:2},
+        {name:"Tuba City", lat:36.13, lon:-111.24, tier:2},
+        {name:"Page", lat:36.91, lon:-111.46, tier:2},
+        {name:"Kanab", lat:37.05, lon:-112.53, tier:2},
+        {name:"St. George", lat:37.10, lon:-113.58, tier:2},
+        {name:"Cedar City", lat:37.68, lon:-113.06, tier:2},
+        {name:"Beaver", lat:38.28, lon:-112.64, tier:2},
+        {name:"Richfield", lat:38.77, lon:-112.08, tier:2},
+        {name:"Nephi", lat:39.71, lon:-111.84, tier:2},
+        {name:"Provo", lat:40.23, lon:-111.66, tier:2},
+        {name:"Orem", lat:40.30, lon:-111.69, tier:2},
+        {name:"Lehi", lat:40.39, lon:-111.85, tier:2},
+        {name:"American Fork", lat:40.38, lon:-111.80, tier:2},
+        {name:"Pleasant Grove", lat:40.36, lon:-111.74, tier:2},
+        {name:"Spanish Fork", lat:40.11, lon:-111.65, tier:2},
+        {name:"Payson", lat:40.04, lon:-111.73, tier:2},
+        {name:"Santaquin", lat:39.98, lon:-111.79, tier:2},
+        {name:"Gunnison UT", lat:39.16, lon:-111.82, tier:2},
+        {name:"Manti", lat:39.27, lon:-111.64, tier:2},
+        {name:"Ephraim", lat:39.36, lon:-111.59, tier:2},
+        {name:"Mount Pleasant", lat:39.55, lon:-111.46, tier:2},
+        {name:"Fairview", lat:39.63, lon:-111.44, tier:2},
+        {name:"Helper", lat:39.69, lon:-110.85, tier:2},
+        {name:"Wellington", lat:39.54, lon:-110.74, tier:2},
+        {name:"East Carbon", lat:39.54, lon:-110.42, tier:2},
+        {name:"Sunnyside", lat:39.55, lon:-110.39, tier:2},
+        {name:"Green River", lat:38.99, lon:-110.16, tier:2},
+        {name:"Hanksville", lat:38.37, lon:-110.71, tier:2},
+        {name:"Torrey", lat:38.30, lon:-111.42, tier:2},
+        {name:"Boulder UT", lat:37.90, lon:-111.43, tier:2},
+        {name:"Escalante", lat:37.77, lon:-111.60, tier:2},
+        {name:"Tropic", lat:37.62, lon:-112.08, tier:2},
+        {name:"Bryce Canyon", lat:37.63, lon:-112.17, tier:2},
+        {name:"Panguitch", lat:37.82, lon:-112.44, tier:2},
+        {name:"Circleville", lat:38.17, lon:-112.27, tier:2},
+        {name:"Junction", lat:38.24, lon:-112.22, tier:2},
+        {name:"Marysvale", lat:38.45, lon:-112.23, tier:2},
+        {name:"Monroe", lat:38.63, lon:-112.12, tier:2},
+        {name:"Elsinore", lat:38.68, lon:-112.15, tier:2},
+        {name:"Joseph", lat:38.63, lon:-112.22, tier:2},
+        {name:"Sevier", lat:38.60, lon:-112.23, tier:2},
+        {name:"Annabella", lat:38.71, lon:-112.06, tier:2},
+        {name:"Glenwood", lat:38.76, lon:-112.00, tier:2},
+        {name:"Sigurd", lat:38.85, lon:-111.97, tier:2},
+        {name:"Salina", lat:38.96, lon:-111.86, tier:2},
+        {name:"Redmond", lat:39.00, lon:-111.87, tier:2},
+        {name:"Aurora UT", lat:38.92, lon:-111.94, tier:2},
+        {name:"Centerfield", lat:39.13, lon:-111.82, tier:2},
+        {name:"Fayette", lat:39.23, lon:-111.85, tier:2},
+        {name:"Mayfield", lat:39.12, lon:-111.71, tier:2},
+        {name:"Sterling", lat:39.19, lon:-111.69, tier:2},
+        {name:"Wales", lat:39.49, lon:-111.67, tier:2},
+        {name:"Fountain Green", lat:39.63, lon:-111.64, tier:2},
+        {name:"Moroni", lat:39.53, lon:-111.59, tier:2},
+        {name:"Spring City", lat:39.48, lon:-111.50, tier:2},
+        {name:"Mount Pleasant", lat:39.55, lon:-111.46, tier:2},
+        {name:"Fairview", lat:39.63, lon:-111.44, tier:2},
+        {name:"Indianola", lat:39.78, lon:-111.47, tier:2},
+        {name:"Thistle", lat:39.99, lon:-111.50, tier:2},
+        {name:"Soldier Summit", lat:39.93, lon:-111.08, tier:2},
+        {name:"Colton", lat:39.85, lon:-111.01, tier:2},
+        {name:"Castle Gate", lat:39.73, lon:-110.87, tier:2},
+        {name:"Helper", lat:39.69, lon:-110.85, tier:2},
+        {name:"Price", lat:39.60, lon:-110.81, tier:2},
+        {name:"Wellington", lat:39.54, lon:-110.74, tier:2},
+        {name:"East Carbon", lat:39.54, lon:-110.42, tier:2},
+        {name:"Sunnyside", lat:39.55, lon:-110.39, tier:2},
+        {name:"Green River", lat:38.99, lon:-110.16, tier:2},
+        {name:"Hanksville", lat:38.37, lon:-110.71, tier:2},
+        {name:"Torrey", lat:38.30, lon:-111.42, tier:2},
+        {name:"Boulder UT", lat:37.90, lon:-111.43, tier:2},
+        {name:"Escalante", lat:37.77, lon:-111.60, tier:2},
+        {name:"Tropic", lat:37.62, lon:-112.08, tier:2},
+        {name:"Bryce Canyon", lat:37.63, lon:-112.17, tier:2},
+        {name:"Panguitch", lat:37.82, lon:-112.44, tier:2},
+        {name:"Circleville", lat:38.17, lon:-112.27, tier:2},
+        {name:"Junction", lat:38.24, lon:-112.22, tier:2},
+        {name:"Marysvale", lat:38.45, lon:-112.23, tier:2},
+        {name:"Monroe", lat:38.63, lon:-112.12, tier:2},
+        {name:"Elsinore", lat:38.68, lon:-112.15, tier:2},
+        {name:"Joseph", lat:38.63, lon:-112.22, tier:2},
+        {name:"Sevier", lat:38.60, lon:-112.23, tier:2},
+        {name:"Annabella", lat:38.71, lon:-112.06, tier:2},
+        {name:"Glenwood", lat:38.76, lon:-112.00, tier:2},
+        {name:"Sigurd", lat:38.85, lon:-111.97, tier:2},
+        {name:"Salina", lat:38.96, lon:-111.86, tier:2},
+        {name:"Redmond", lat:39.00, lon:-111.87, tier:2},
+        {name:"Aurora UT", lat:38.92, lon:-111.94, tier:2},
+        {name:"Centerfield", lat:39.13, lon:-111.82, tier:2},
+        {name:"Fayette", lat:39.23, lon:-111.85, tier:2},
+        {name:"Mayfield", lat:39.12, lon:-111.71, tier:2},
+        {name:"Sterling", lat:39.19, lon:-111.69, tier:2},
+        {name:"Wales", lat:39.49, lon:-111.67, tier:2},
+        {name:"Fountain Green", lat:39.63, lon:-111.64, tier:2},
+        {name:"Moroni", lat:39.53, lon:-111.59, tier:2},
+        {name:"Spring City", lat:39.48, lon:-111.50, tier:2}
+    ];
+    
+    // NWS Station IDs for major cities (ICAO codes). Add more as needed.
+    // These are used to pull live temperatures.
+    const STATIONS = [
+        {id:"KJFK", name:"New York (JFK)", lat:40.64, lon:-73.78},
+        {id:"KLAX", name:"Los Angeles", lat:33.94, lon:-118.41},
+        {id:"KORD", name:"Chicago", lat:41.98, lon:-87.90},
+        {id:"KIAH", name:"Houston", lat:29.98, lon:-95.34},
+        {id:"KPHX", name:"Phoenix", lat:33.43, lon:-112.01},
+        {id:"KPHL", name:"Philadelphia", lat:39.87, lon:-75.24},
+        {id:"KSAT", name:"San Antonio", lat:29.53, lon:-98.47},
+        {id:"KSAN", name:"San Diego", lat:32.73, lon:-117.19},
+        {id:"KDFW", name:"Dallas-Fort Worth", lat:32.90, lon:-97.04},
+        {id:"KSJC", name:"San Jose", lat:37.36, lon:-121.93},
+        {id:"KAUS", name:"Austin", lat:30.19, lon:-97.67},
+        {id:"KJAX", name:"Jacksonville", lat:30.49, lon:-81.69},
+        {id:"KCMH", name:"Columbus OH", lat:39.99, lon:-82.88},
+        {id:"KCLT", name:"Charlotte", lat:35.21, lon:-80.94},
+        {id:"KIND", name:"Indianapolis", lat:39.72, lon:-86.29},
+        {id:"KSFO", name:"San Francisco", lat:37.62, lon:-122.38},
+        {id:"KSEA", name:"Seattle", lat:47.45, lon:-122.31},
+        {id:"KDEN", name:"Denver", lat:39.86, lon:-104.67},
+        {id:"KDCA", name:"Washington DC", lat:38.85, lon:-77.04},
+        {id:"KBOS", name:"Boston", lat:42.36, lon:-71.01},
+        {id:"KELP", name:"El Paso", lat:31.81, lon:-106.38},
+        {id:"KBNA", name:"Nashville", lat:36.12, lon:-86.68},
+        {id:"KDTW", name:"Detroit", lat:42.21, lon:-83.35},
+        {id:"KOKC", name:"Oklahoma City", lat:35.39, lon:-97.60},
+        {id:"KPDX", name:"Portland OR", lat:45.59, lon:-122.60},
+        {id:"KLAS", name:"Las Vegas", lat:36.08, lon:-115.15},
+        {id:"KMEM", name:"Memphis", lat:35.04, lon:-89.98},
+        {id:"KSDF", name:"Louisville", lat:38.17, lon:-85.74},
+        {id:"KBWI", name:"Baltimore", lat:39.18, lon:-76.67},
+        {id:"KMKE", name:"Milwaukee", lat:42.95, lon:-87.90},
+        {id:"KABQ", name:"Albuquerque", lat:35.04, lon:-106.61},
+        {id:"KTUS", name:"Tucson", lat:32.12, lon:-110.94},
+        {id:"KFAT", name:"Fresno", lat:36.78, lon:-119.72},
+        {id:"KSMF", name:"Sacramento", lat:38.70, lon:-121.59},
+        {id:"KMCI", name:"Kansas City", lat:39.30, lon:-94.71},
+        {id:"KATL", name:"Atlanta", lat:33.64, lon:-84.43},
+        {id:"KOMA", name:"Omaha", lat:41.30, lon:-95.89},
+        {id:"KCOS", name:"Colorado Springs", lat:38.81, lon:-104.70},
+        {id:"KRDU", name:"Raleigh", lat:35.88, lon:-78.79},
+        {id:"KMIA", name:"Miami", lat:25.80, lon:-80.29},
+        {id:"KORF", name:"Norfolk", lat:36.89, lon:-76.20},
+        {id:"KMSP", name:"Minneapolis", lat:44.88, lon:-93.22},
+        {id:"KTUL", name:"Tulsa", lat:36.20, lon:-95.89},
+        {id:"KTPA", name:"Tampa", lat:27.98, lon:-82.53},
+        {id:"KMSY", name:"New Orleans", lat:29.99, lon:-90.26},
+        {id:"KICT", name:"Wichita", lat:37.65, lon:-97.43},
+        {id:"KCLE", name:"Cleveland", lat:41.41, lon:-81.85},
+        {id:"KBFL", name:"Bakersfield", lat:35.43, lon:-119.06},
+        {id:"PHNL", name:"Honolulu", lat:21.32, lon:-157.92},
+        {id:"PANC", name:"Anchorage", lat:61.17, lon:-150.00},
+        {id:"KSLC", name:"Salt Lake City", lat:40.79, lon:-111.98},
+        {id:"KBOI", name:"Boise", lat:43.56, lon:-116.22},
+        {id:"KBIL", name:"Billings", lat:45.81, lon:-108.54},
+        {id:"KGEG", name:"Spokane", lat:47.62, lon:-117.53},
+        {id:"KFSD", name:"Sioux Falls", lat:43.58, lon:-96.74},
+        {id:"KFAR", name:"Fargo", lat:46.92, lon:-96.82},
+        {id:"KGTF", name:"Great Falls", lat:47.48, lon:-111.37},
+        {id:"KHLN", name:"Helena", lat:46.61, lon:-111.98},
+        {id:"PAFA", name:"Fairbanks", lat:64.82, lon:-147.86},
+        {id:"PAJN", name:"Juneau", lat:58.36, lon:-134.58}
+    ];
+    
+    // ============================================================
+    // GLOBAL STATE
+    // ============================================================
+    let map;
+    let cityLayerGroup;
+    let tempLayerGroup;
+    let radarLayer = null;
+    let satLayer = null;
+    let lastRadarPath = null;
+    
+    // ============================================================
+    // INITIALIZE MAP
+    // ============================================================
+    function initMap() {
+        map = L.map('map', {
+            center: CONFIG.defaultCenter,
+            zoom: CONFIG.defaultZoom,
+            minZoom: CONFIG.minZoom,
+            maxZoom: CONFIG.maxZoom,
+            zoomControl: true
+        });
+        
+        // Base map - Esri World Street Map (free public tiles, works from local files)
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+            attribution: 'Tiles &copy; Esri',
+            maxZoom: 19
+        }).addTo(map);
+        
+        cityLayerGroup = L.layerGroup().addTo(map);
+        tempLayerGroup = L.layerGroup().addTo(map);
+        
+        // Progressive city labels
+        updateCityLabels();
+        map.on('zoomend', updateCityLabels);
+        
+        // Wire up controls
+        document.getElementById('satSelect').addEventListener('change', updateSatellite);
+        document.getElementById('radarSelect').addEventListener('change', updateRadar);
+        document.getElementById('tempSelect').addEventListener('change', () => {
+            if (document.getElementById('tempSelect').value === 'on') {
+                fetchTemperatures();
+            } else {
+                tempLayerGroup.clearLayers();
+                document.getElementById('tempStatus').textContent = 'Off';
+            }
+        });
+        document.getElementById('refreshBtn').addEventListener('click', () => {
+            fetchTemperatures();
+            updateRadar(true);
+            updateSatellite();
+        });
+        
+        // Initial data load
+        fetchTemperatures();
+        updateRadar(true);
+        updateSatellite();
+        
+        // Auto-refresh timers
+        setInterval(fetchTemperatures, CONFIG.tempRefreshMs);
+        setInterval(() => updateRadar(true), CONFIG.radarRefreshMs);
+        setInterval(updateSatellite, CONFIG.radarRefreshMs);
+    }
+    
+    // ============================================================
+    // PROGRESSIVE CITY LABELS
+    // ============================================================
+    function updateCityLabels() {
+        cityLayerGroup.clearLayers();
+        const zoom = map.getZoom();
+        
+        CITIES.forEach(city => {
+            // Tier logic: higher zoom shows more cities
+            if (city.tier === 1 || (city.tier === 2 && zoom >= 6) || (city.tier >= 3 && zoom >= 8)) {
+                const icon = L.divIcon({
+                    className: 'city-label' + (city.tier === 1 ? ' major' : ''),
+                    html: city.name,
+                    iconSize: [0, 0],
+                    iconAnchor: [0, 0]
+                });
+                L.marker([city.lat, city.lon], {icon: icon, interactive: false}).addTo(cityLayerGroup);
+            }
+        });
+    }
+    
+    // ============================================================
+    // NWS TEMPERATURES
+    // ============================================================
+    async function fetchTemperatures() {
+        if (document.getElementById('tempSelect').value !== 'on') return;
+        
+        document.getElementById('tempStatus').textContent = 'Updating...';
+        tempLayerGroup.clearLayers();
+        
+        let successCount = 0;
+        
+        // Fetch a reasonable number of stations (avoid hammering the API)
+        const toFetch = STATIONS.slice(0, 40); // limit concurrent
+        
+        const promises = toFetch.map(async (station) => {
+            try {
+                const url = `https://api.weather.gov/stations/${station.id}/observations/latest`;
+                const resp = await fetch(url, {
+                    headers: {
+                        'User-Agent': CONFIG.userAgent,
+                        'Accept': 'application/geo+json'
+                    }
+                });
+                if (!resp.ok) return null;
+                const data = await resp.json();
+                const props = data.properties;
+                if (!props || props.temperature.value === null) return null;
+                
+                // Convert C to F
+                const tempC = props.temperature.value;
+                const tempF = Math.round(tempC * 9/5 + 32);
+                
+                return {
+                    station,
+                    tempF,
+                    tempC: Math.round(tempC),
+                    timestamp: props.timestamp,
+                    text: props.textDescription || ''
+                };
+            } catch (e) {
+                return null;
+            }
+        });
+        
+        const results = await Promise.all(promises);
+        
+        results.forEach(r => {
+            if (!r) return;
+            successCount++;
+            
+            let cls = 'temp-marker';
+            if (r.tempF >= 90) cls += ' hot';
+            else if (r.tempF >= 70) cls += ' warm';
+            else if (r.tempF >= 40) cls += ' cool';
+            else cls += ' cold';
+            
+            const icon = L.divIcon({
+                className: cls,
+                html: r.tempF + '°',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16]
+            });
+            
+            const marker = L.marker([r.station.lat, r.station.lon], {icon: icon})
+                .bindPopup(`<strong>${r.station.name}</strong><br>
+                            ${r.tempF}°F (${r.tempC}°C)<br>
+                            ${r.text}<br>
+                            <small>${new Date(r.timestamp).toLocaleString()}</small>`);
+            marker.addTo(tempLayerGroup);
+        });
+        
+        document.getElementById('tempStatus').textContent = `${successCount} stations`;
+        document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+    }
+    
+    // ============================================================
+    // RADAR (RainViewer)
+    // ============================================================
+    async function updateRadar(force = false) {
+        if (document.getElementById('radarSelect').value !== 'on') {
+            if (radarLayer) {
+                map.removeLayer(radarLayer);
+                radarLayer = null;
+            }
+            document.getElementById('radarStatus').textContent = 'Off';
+            return;
+        }
+        
+        try {
+            const resp = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+            const api = await resp.json();
+            
+            if (!api.radar || !api.radar.past || api.radar.past.length === 0) {
+                document.getElementById('radarStatus').textContent = 'No data';
+                return;
+            }
+            
+            // Use the most recent past frame
+            const latest = api.radar.past[api.radar.past.length - 1];
+            const path = latest.path;
+            
+            if (!force && path === lastRadarPath && radarLayer) {
+                document.getElementById('radarStatus').textContent = 'Up to date';
+                return;
+            }
+            lastRadarPath = path;
+            
+            if (radarLayer) {
+                map.removeLayer(radarLayer);
+            }
+            
+            // RainViewer tile URL pattern
+            // color=2 (Universal Blue), options=1_1 (smooth + snow)
+            radarLayer = L.tileLayer(api.host + path + '/256/{z}/{x}/{y}/2/1_1.png', {
+                opacity: CONFIG.radarOpacity,
+                zIndex: 200,
+                maxNativeZoom: 7,   // free tier limit
+                maxZoom: 12
+            }).addTo(map);
+            
+            const timeStr = new Date(latest.time * 1000).toLocaleTimeString();
+            document.getElementById('radarStatus').textContent = timeStr;
+            document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+        } catch (e) {
+            console.error('Radar error', e);
+            document.getElementById('radarStatus').textContent = 'Error';
+        }
+    }
+    
+    // ============================================================
+    // SATELLITE (Iowa State Mesonet GOES WMS - free & reliable)
+    // ============================================================
+    function updateSatellite() {
+        const choice = document.getElementById('satSelect').value;
+        
+        if (satLayer) {
+            map.removeLayer(satLayer);
+            satLayer = null;
+        }
+        
+        if (choice === 'none') return;
+        
+        // Iowa State Mesonet provides excellent free GOES WMS
+        // Visible (daytime clouds) and Infrared (cloud tops day/night)
+        let wmsUrl, layers;
+        
+        if (choice === 'visible') {
+            // GOES East + West visible composite-ish via available layers
+            // Using the well-known GOES East CONUS visible as primary
+            wmsUrl = 'https://mesonet.agron.iastate.edu/cgi-bin/wms/goes/conus_vis.cgi?';
+            layers = 'conus_vis_1km';
+        } else if (choice === 'infrared') {
+            wmsUrl = 'https://mesonet.agron.iastate.edu/cgi-bin/wms/goes/conus_ir.cgi?';
+            layers = 'conus_ir_4km';
+        }
+        
+        if (wmsUrl) {
+            satLayer = L.tileLayer.wms(wmsUrl, {
+                layers: layers,
+                format: 'image/png',
+                transparent: true,
+                opacity: CONFIG.satelliteOpacity,
+                attribution: 'Satellite © Iowa State Mesonet / NOAA GOES',
+                zIndex: 100
+            }).addTo(map);
+        }
+    }
+    
+    // ============================================================
+    // START EVERYTHING
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', initMap);
+    </script>
+</body>
+</html>
