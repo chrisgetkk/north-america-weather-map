@@ -1,3 +1,5 @@
+Files
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -19,35 +21,61 @@
             border-radius: 12px; width: 300px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             max-height: 92vh; overflow: hidden;
-            transition: width 0.25s ease, opacity 0.25s ease;
+            transition: all 0.25s ease;
         }
         .control-panel.minimized {
-            width: 48px; height: 48px; overflow: hidden; cursor: pointer;
+            width: 52px;
+            height: 52px;
         }
-        .control-panel.minimized .panel-content { display: none; }
-        .control-panel.minimized .panel-header { 
-            justify-content: center; padding: 0; height: 48px;
+        .control-panel.minimized .panel-content {
+            display: none !important;
         }
-        .control-panel.minimized .panel-title { display: none; }
-        .control-panel.minimized .toggle-btn { font-size: 22px; margin: 0; }
+        .control-panel.minimized .panel-title {
+            display: none !important;
+        }
+        .control-panel.minimized .panel-header {
+            justify-content: center;
+            padding: 0;
+            height: 52px;
+            border-bottom: none;
+        }
         
         .panel-header {
             display: flex; align-items: center; justify-content: space-between;
             padding: 12px 14px 8px 14px;
             border-bottom: 1px solid #334155;
             background: rgba(15, 23, 42, 0.9);
+            cursor: pointer;
         }
         .panel-title { font-size: 15px; color: #38bdf8; font-weight: 600; }
+        
         .toggle-btn {
-            background: none; border: none; color: #94a3b8; font-size: 18px;
-            cursor: pointer; padding: 4px 8px; border-radius: 6px;
-            line-height: 1; transition: color 0.2s, background 0.2s;
+            background: #1e293b;
+            border: 1px solid #475569;
+            color: #e2e8f0;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            transition: all 0.2s;
+            flex-shrink: 0;
         }
-        .toggle-btn:hover { color: #38bdf8; background: rgba(56,189,248,0.1); }
+        .toggle-btn:hover {
+            background: #334155;
+            border-color: #38bdf8;
+            color: #38bdf8;
+        }
         
         .panel-content {
             padding: 12px 14px 14px 14px;
-            max-height: calc(92vh - 50px); overflow-y: auto;
+            max-height: calc(92vh - 55px);
+            overflow-y: auto;
         }
         
         .control-group { margin-bottom: 12px; }
@@ -55,17 +83,21 @@
             display: block; font-size: 12px; color: #94a3b8;
             margin-bottom: 4px; font-weight: 500;
         }
-        select, button {
+        select, button.action-btn {
             width: 100%; padding: 8px 10px; border-radius: 6px;
             border: 1px solid #475569; background: #1e293b;
             color: #f1f5f9; font-size: 13px; cursor: pointer;
         }
-        select:hover, button:hover { border-color: #38bdf8; }
-        button {
+        select:hover, button.action-btn:hover { border-color: #38bdf8; }
+        button.action-btn {
             background: #0ea5e9; border-color: #0ea5e9; font-weight: 600; margin-top: 4px;
         }
-        button:hover { background: #0284c7; }
-        button.secondary { background: #334155; border-color: #475569; }
+        button.action-btn:hover { background: #0284c7; }
+        button.secondary {
+            background: #334155; border-color: #475569; color: #f1f5f9;
+            padding: 8px 10px; border-radius: 6px; border: 1px solid #475569;
+            font-size: 13px; cursor: pointer; width: 100%;
+        }
         button.secondary:hover { background: #475569; }
         .btn-row { display: flex; gap: 6px; margin-top: 6px; }
         .btn-row button { flex: 1; }
@@ -123,9 +155,9 @@
     <div id="map"></div>
     
     <div class="control-panel" id="controlPanel">
-        <div class="panel-header">
+        <div class="panel-header" id="panelHeader">
             <div class="panel-title">🌤 Live Weather Map</div>
-            <button class="toggle-btn" id="toggleBtn" title="Minimize / Expand">−</button>
+            <button class="toggle-btn" id="toggleBtn" title="Minimize menu">−</button>
         </div>
         
         <div class="panel-content" id="panelContent">
@@ -167,7 +199,7 @@
                 </select>
             </div>
             
-            <button id="refreshBtn">↻ Refresh All Data</button>
+            <button id="refreshBtn" class="action-btn">↻ Refresh All Data</button>
             
             <div id="alertBox" class="alert-box" style="display:none;"></div>
             
@@ -195,117 +227,86 @@
         tempRefreshMs: 6 * 60 * 1000,
         radarRefreshMs: 3 * 60 * 1000,
         alertRefreshMs: 4 * 60 * 1000,
-        userAgent: "NorthAmericaWeatherMap/2.3 (personal use)",
+        userAgent: "NorthAmericaWeatherMap/2.5 (personal use)",
         radarOpacity: 0.65,
         satelliteOpacity: 0.55,
         radarFramesToKeep: 12,
-        maxTempsToFetch: 70
+        maxTempsToFetch: 80
     };
 
-    // Expanded station list for better coverage when zoomed in
     const STATIONS = [
+        // Columbus OH area - denser coverage
+        {id:"KCMH",name:"Columbus John Glenn",lat:39.99,lon:-82.88},
+        {id:"KOSU",name:"Ohio State University",lat:40.08,lon:-83.07},
+        {id:"KLCK",name:"Rickenbacker",lat:39.81,lon:-82.93},
+        {id:"KTZR",name:"Bolton Field",lat:39.90,lon:-83.14},
+        {id:"KMRT",name:"Union County / Marysville",lat:40.22,lon:-83.35},
+        {id:"KEDJ",name:"Bellefontaine",lat:40.37,lon:-83.82},
+        {id:"KUHF",name:"Upper Sandusky",lat:40.88,lon:-83.31},
+        {id:"KMGY",name:"Dayton Wright Brothers",lat:39.59,lon:-84.22},
+        {id:"KDAY",name:"Dayton International",lat:39.90,lon:-84.22},
+        {id:"KFFO",name:"Wright-Patterson AFB",lat:39.83,lon:-84.05},
+        {id:"KILN",name:"Wilmington OH",lat:39.43,lon:-83.79},
+        {id:"KSGH",name:"Springfield OH",lat:39.84,lon:-83.84},
+        {id:"KCAK",name:"Akron-Canton",lat:40.92,lon:-81.44},
+        {id:"KCLE",name:"Cleveland",lat:41.41,lon:-81.85},
+        {id:"KBKL",name:"Cleveland Burke",lat:41.52,lon:-81.68},
+        {id:"KYNG",name:"Youngstown",lat:41.26,lon:-80.67},
+        {id:"KMFD",name:"Mansfield",lat:40.82,lon:-82.52},
+        {id:"KTOL",name:"Toledo",lat:41.59,lon:-83.80},
+        {id:"KFDY",name:"Findlay",lat:41.01,lon:-83.67},
+        {id:"KAOH",name:"Lima Allen County",lat:40.71,lon:-84.02},
+        {id:"KCVG",name:"Cincinnati / Northern Kentucky",lat:39.05,lon:-84.67},
+        {id:"KLUK",name:"Cincinnati Lunken",lat:39.10,lon:-84.42},
+        {id:"KHAO",name:"Hamilton OH",lat:39.36,lon:-84.52},
+
         // Northeast
         {id:"KJFK",name:"New York JFK",lat:40.64,lon:-73.78},{id:"KLGA",name:"LaGuardia",lat:40.78,lon:-73.87},
-        {id:"KEWR",name:"Newark",lat:40.69,lon:-74.17},{id:"KTEB",name:"Teterboro",lat:40.85,lon:-74.06},
-        {id:"KBOS",name:"Boston",lat:42.36,lon:-71.01},{id:"KBDL",name:"Hartford",lat:41.94,lon:-72.68},
-        {id:"KPVD",name:"Providence",lat:41.72,lon:-71.43},{id:"KALB",name:"Albany",lat:42.75,lon:-73.80},
-        {id:"KSYR",name:"Syracuse",lat:43.11,lon:-76.11},{id:"KROC",name:"Rochester",lat:43.12,lon:-77.67},
-        {id:"KBUF",name:"Buffalo",lat:42.94,lon:-78.73},{id:"KBTV",name:"Burlington",lat:44.47,lon:-73.15},
-        {id:"KPWM",name:"Portland ME",lat:43.65,lon:-70.31},{id:"KBGR",name:"Bangor",lat:44.81,lon:-68.83},
-        {id:"KMHT",name:"Manchester",lat:42.93,lon:-71.44},{id:"KCON",name:"Concord",lat:43.20,lon:-71.50},
-        {id:"KPHL",name:"Philadelphia",lat:39.87,lon:-75.24},{id:"KABE",name:"Allentown",lat:40.65,lon:-75.44},
-        {id:"KMDT",name:"Harrisburg",lat:40.19,lon:-76.76},{id:"KAVP",name:"Scranton",lat:41.34,lon:-75.72},
-        {id:"KPIT",name:"Pittsburgh",lat:40.49,lon:-80.23},{id:"KERI",name:"Erie",lat:42.08,lon:-80.18},
-        // Mid-Atlantic
+        {id:"KEWR",name:"Newark",lat:40.69,lon:-74.17},{id:"KBOS",name:"Boston",lat:42.36,lon:-71.01},
+        {id:"KBDL",name:"Hartford",lat:41.94,lon:-72.68},{id:"KPVD",name:"Providence",lat:41.72,lon:-71.43},
+        {id:"KALB",name:"Albany",lat:42.75,lon:-73.80},{id:"KSYR",name:"Syracuse",lat:43.11,lon:-76.11},
+        {id:"KROC",name:"Rochester",lat:43.12,lon:-77.67},{id:"KBUF",name:"Buffalo",lat:42.94,lon:-78.73},
+        {id:"KPHL",name:"Philadelphia",lat:39.87,lon:-75.24},{id:"KPIT",name:"Pittsburgh",lat:40.49,lon:-80.23},
+
+        // Mid-Atlantic & South
         {id:"KDCA",name:"Washington Reagan",lat:38.85,lon:-77.04},{id:"KIAD",name:"Dulles",lat:38.95,lon:-77.46},
         {id:"KBWI",name:"Baltimore",lat:39.18,lon:-76.67},{id:"KRIC",name:"Richmond",lat:37.51,lon:-77.32},
-        {id:"KORF",name:"Norfolk",lat:36.89,lon:-76.20},{id:"KROA",name:"Roanoke",lat:37.33,lon:-79.98},
         {id:"KCLT",name:"Charlotte",lat:35.21,lon:-80.94},{id:"KRDU",name:"Raleigh",lat:35.88,lon:-78.79},
-        {id:"KGSO",name:"Greensboro",lat:36.10,lon:-79.94},{id:"KFAY",name:"Fayetteville",lat:34.99,lon:-78.88},
-        {id:"KILM",name:"Wilmington NC",lat:34.27,lon:-77.90},{id:"KCHS",name:"Charleston SC",lat:32.90,lon:-80.04},
-        {id:"KCAE",name:"Columbia SC",lat:33.94,lon:-81.12},{id:"KGSP",name:"Greenville SC",lat:34.90,lon:-82.22},
-        {id:"KATL",name:"Atlanta",lat:33.64,lon:-84.43},{id:"KSAV",name:"Savannah",lat:32.13,lon:-81.20},
-        {id:"KAHN",name:"Athens",lat:33.95,lon:-83.33},{id:"KCSG",name:"Columbus GA",lat:32.52,lon:-84.94},
+        {id:"KATL",name:"Atlanta",lat:33.64,lon:-84.43},{id:"KBNA",name:"Nashville",lat:36.12,lon:-86.68},
+        {id:"KMEM",name:"Memphis",lat:35.04,lon:-89.98},{id:"KSDF",name:"Louisville",lat:38.17,lon:-85.74},
+        {id:"KLEX",name:"Lexington",lat:38.04,lon:-84.61},{id:"KBHM",name:"Birmingham",lat:33.56,lon:-86.75},
+
         // Florida
         {id:"KMIA",name:"Miami",lat:25.80,lon:-80.29},{id:"KFLL",name:"Fort Lauderdale",lat:26.07,lon:-80.15},
-        {id:"KPBI",name:"West Palm Beach",lat:26.68,lon:-80.10},{id:"KMCO",name:"Orlando",lat:28.43,lon:-81.31},
-        {id:"KTPA",name:"Tampa",lat:27.98,lon:-82.53},{id:"KPIE",name:"St Petersburg",lat:27.91,lon:-82.69},
-        {id:"KJAX",name:"Jacksonville",lat:30.49,lon:-81.69},{id:"KTLH",name:"Tallahassee",lat:30.40,lon:-84.35},
-        {id:"KPNS",name:"Pensacola",lat:30.47,lon:-87.19},{id:"KEYW",name:"Key West",lat:24.56,lon:-81.75},
+        {id:"KMCO",name:"Orlando",lat:28.43,lon:-81.31},{id:"KTPA",name:"Tampa",lat:27.98,lon:-82.53},
+        {id:"KJAX",name:"Jacksonville",lat:30.49,lon:-81.69},
+
         // Midwest
         {id:"KORD",name:"Chicago O'Hare",lat:41.98,lon:-87.90},{id:"KMDW",name:"Chicago Midway",lat:41.79,lon:-87.75},
-        {id:"KRFD",name:"Rockford",lat:42.20,lon:-89.10},{id:"KPIA",name:"Peoria",lat:40.67,lon:-89.69},
-        {id:"KCMI",name:"Champaign",lat:40.04,lon:-88.28},{id:"KSPI",name:"Springfield IL",lat:39.84,lon:-89.68},
-        {id:"KSTL",name:"St. Louis",lat:38.75,lon:-90.37},{id:"KCOU",name:"Columbia MO",lat:38.82,lon:-92.22},
-        {id:"KSGF",name:"Springfield MO",lat:37.24,lon:-93.39},{id:"KMCI",name:"Kansas City",lat:39.30,lon:-94.71},
-        {id:"KICT",name:"Wichita",lat:37.65,lon:-97.43},{id:"KTUL",name:"Tulsa",lat:36.20,lon:-95.89},
+        {id:"KSTL",name:"St. Louis",lat:38.75,lon:-90.37},{id:"KMCI",name:"Kansas City",lat:39.30,lon:-94.71},
         {id:"KOKC",name:"Oklahoma City",lat:35.39,lon:-97.60},{id:"KOMA",name:"Omaha",lat:41.30,lon:-95.89},
-        {id:"KLNK",name:"Lincoln",lat:40.85,lon:-96.76},{id:"KDSM",name:"Des Moines",lat:41.53,lon:-93.66},
-        {id:"KCID",name:"Cedar Rapids",lat:41.88,lon:-91.71},{id:"KDBQ",name:"Dubuque",lat:42.40,lon:-90.70},
-        {id:"KMSP",name:"Minneapolis",lat:44.88,lon:-93.22},{id:"KRST",name:"Rochester MN",lat:43.91,lon:-92.50},
-        {id:"KFAR",name:"Fargo",lat:46.92,lon:-96.82},{id:"KFSD",name:"Sioux Falls",lat:43.58,lon:-96.74},
-        {id:"KMKE",name:"Milwaukee",lat:42.95,lon:-87.90},{id:"KMSN",name:"Madison",lat:43.14,lon:-89.34},
-        {id:"KGRB",name:"Green Bay",lat:44.49,lon:-88.13},{id:"KATW",name:"Appleton",lat:44.26,lon:-88.52},
-        {id:"KDTW",name:"Detroit",lat:42.21,lon:-83.35},{id:"KGRR",name:"Grand Rapids",lat:42.88,lon:-85.52},
-        {id:"KLAN",name:"Lansing",lat:42.78,lon:-84.59},{id:"KFNT",name:"Flint",lat:42.97,lon:-83.75},
-        {id:"KAZO",name:"Kalamazoo",lat:42.23,lon:-85.55},{id:"KSBN",name:"South Bend",lat:41.71,lon:-86.32},
-        {id:"KIND",name:"Indianapolis",lat:39.72,lon:-86.29},{id:"KFWA",name:"Fort Wayne",lat:40.98,lon:-85.20},
-        {id:"KEVV",name:"Evansville",lat:38.04,lon:-87.53},{id:"KCMH",name:"Columbus OH",lat:39.99,lon:-82.88},
-        {id:"KCLE",name:"Cleveland",lat:41.41,lon:-81.85},{id:"KDAY",name:"Dayton",lat:39.90,lon:-84.22},
-        {id:"KCAK",name:"Akron",lat:40.92,lon:-81.44},{id:"KCVG",name:"Cincinnati",lat:39.05,lon:-84.67},
-        {id:"KSDF",name:"Louisville",lat:38.17,lon:-85.74},{id:"KLEX",name:"Lexington",lat:38.04,lon:-84.61},
-        {id:"KBNA",name:"Nashville",lat:36.12,lon:-86.68},{id:"KMEM",name:"Memphis",lat:35.04,lon:-89.98},
-        {id:"KCHA",name:"Chattanooga",lat:35.04,lon:-85.20},{id:"KTYS",name:"Knoxville",lat:35.81,lon:-83.99},
-        // South
-        {id:"KMSY",name:"New Orleans",lat:29.99,lon:-90.26},{id:"KBTR",name:"Baton Rouge",lat:30.53,lon:-91.15},
-        {id:"KSHV",name:"Shreveport",lat:32.45,lon:-93.83},{id:"KJAN",name:"Jackson MS",lat:32.31,lon:-90.08},
-        {id:"KGPT",name:"Gulfport",lat:30.41,lon:-89.07},{id:"KMOB",name:"Mobile",lat:30.69,lon:-88.24},
-        {id:"KBHM",name:"Birmingham",lat:33.56,lon:-86.75},{id:"KHSV",name:"Huntsville",lat:34.64,lon:-86.78},
-        {id:"KMGM",name:"Montgomery",lat:32.30,lon:-86.39},{id:"KLIT",name:"Little Rock",lat:34.73,lon:-92.22},
-        {id:"KXNA",name:"Northwest Arkansas",lat:36.28,lon:-94.31},
-        // Texas
-        {id:"KDFW",name:"Dallas-Fort Worth",lat:32.90,lon:-97.04},{id:"KDAL",name:"Dallas Love",lat:32.85,lon:-96.85},
-        {id:"KIAH",name:"Houston Intercontinental",lat:29.98,lon:-95.34},{id:"KHOU",name:"Houston Hobby",lat:29.65,lon:-95.28},
-        {id:"KAUS",name:"Austin",lat:30.19,lon:-97.67},{id:"KSAT",name:"San Antonio",lat:29.53,lon:-98.47},
-        {id:"KELP",name:"El Paso",lat:31.81,lon:-106.38},{id:"KLBB",name:"Lubbock",lat:33.66,lon:-101.82},
-        {id:"KAMA",name:"Amarillo",lat:35.22,lon:-101.71},{id:"KMAF",name:"Midland",lat:31.94,lon:-102.20},
-        {id:"KCRP",name:"Corpus Christi",lat:27.77,lon:-97.50},{id:"KBRO",name:"Brownsville",lat:25.91,lon:-97.43},
-        {id:"KGRK",name:"Killeen",lat:31.07,lon:-97.83},{id:"KACT",name:"Waco",lat:31.61,lon:-97.23},
-        // Plains & Rockies
-        {id:"KDEN",name:"Denver",lat:39.86,lon:-104.67},{id:"KCOS",name:"Colorado Springs",lat:38.81,lon:-104.70},
-        {id:"KGJT",name:"Grand Junction",lat:39.12,lon:-108.53},{id:"KPUB",name:"Pueblo",lat:38.29,lon:-104.50},
-        {id:"KCYS",name:"Cheyenne",lat:41.16,lon:-104.81},{id:"KCPR",name:"Casper",lat:42.91,lon:-106.46},
-        {id:"KSLC",name:"Salt Lake City",lat:40.79,lon:-111.98},{id:"KPVU",name:"Provo",lat:40.22,lon:-111.72},
-        {id:"KBIL",name:"Billings",lat:45.81,lon:-108.54},{id:"KBZN",name:"Bozeman",lat:45.78,lon:-111.15},
-        {id:"KGTF",name:"Great Falls",lat:47.48,lon:-111.37},{id:"KMSO",name:"Missoula",lat:46.92,lon:-114.09},
-        {id:"KHLN",name:"Helena",lat:46.61,lon:-111.98},{id:"KJAC",name:"Jackson Hole",lat:43.61,lon:-110.74},
-        {id:"KBOI",name:"Boise",lat:43.56,lon:-116.22},{id:"KTWF",name:"Twin Falls",lat:42.48,lon:-114.49},
-        {id:"KIDA",name:"Idaho Falls",lat:43.52,lon:-112.07},
-        // Southwest
-        {id:"KPHX",name:"Phoenix",lat:33.43,lon:-112.01},{id:"KTUS",name:"Tucson",lat:32.12,lon:-110.94},
-        {id:"KFLG",name:"Flagstaff",lat:35.14,lon:-111.67},{id:"KABQ",name:"Albuquerque",lat:35.04,lon:-106.61},
-        {id:"KSAF",name:"Santa Fe",lat:35.62,lon:-106.09},{id:"KLAS",name:"Las Vegas",lat:36.08,lon:-115.15},
-        {id:"KRNO",name:"Reno",lat:39.50,lon:-119.77},{id:"KCXP",name:"Carson City",lat:39.19,lon:-119.73},
-        // California
-        {id:"KLAX",name:"Los Angeles",lat:33.94,lon:-118.41},{id:"KBUR",name:"Burbank",lat:34.20,lon:-118.36},
-        {id:"KSNA",name:"Orange County",lat:33.68,lon:-117.87},{id:"KSAN",name:"San Diego",lat:32.73,lon:-117.19},
-        {id:"KPSP",name:"Palm Springs",lat:33.83,lon:-116.51},{id:"KFAT",name:"Fresno",lat:36.78,lon:-119.72},
-        {id:"KBFL",name:"Bakersfield",lat:35.43,lon:-119.06},{id:"KSBA",name:"Santa Barbara",lat:34.43,lon:-119.84},
-        {id:"KSFO",name:"San Francisco",lat:37.62,lon:-122.38},{id:"KOAK",name:"Oakland",lat:37.72,lon:-122.22},
-        {id:"KSJC",name:"San Jose",lat:37.36,lon:-121.93},{id:"KSMF",name:"Sacramento",lat:38.70,lon:-121.59},
-        {id:"KSTS",name:"Santa Rosa",lat:38.51,lon:-122.81},{id:"KMRY",name:"Monterey",lat:36.59,lon:-121.84},
-        {id:"KACV",name:"Eureka",lat:40.98,lon:-124.11},{id:"KRDD",name:"Redding",lat:40.51,lon:-122.29},
-        // Pacific Northwest
-        {id:"KSEA",name:"Seattle",lat:47.45,lon:-122.31},{id:"KBFI",name:"Seattle Boeing",lat:47.53,lon:-122.30},
-        {id:"KPAE",name:"Everett",lat:47.91,lon:-122.28},{id:"KOLM",name:"Olympia",lat:46.97,lon:-122.90},
-        {id:"KPDX",name:"Portland",lat:45.59,lon:-122.60},{id:"KEUG",name:"Eugene",lat:44.12,lon:-123.22},
-        {id:"KMFR",name:"Medford",lat:42.37,lon:-122.87},{id:"KBDN",name:"Bend",lat:44.09,lon:-121.20},
-        {id:"KGEG",name:"Spokane",lat:47.62,lon:-117.53},{id:"KPUW",name:"Pullman",lat:46.74,lon:-117.11},
-        {id:"KYKM",name:"Yakima",lat:46.57,lon:-120.54},{id:"KALW",name:"Walla Walla",lat:46.09,lon:-118.29},
+        {id:"KDSM",name:"Des Moines",lat:41.53,lon:-93.66},{id:"KMSP",name:"Minneapolis",lat:44.88,lon:-93.22},
+        {id:"KMKE",name:"Milwaukee",lat:42.95,lon:-87.90},{id:"KDTW",name:"Detroit",lat:42.21,lon:-83.35},
+        {id:"KGRR",name:"Grand Rapids",lat:42.88,lon:-85.52},{id:"KIND",name:"Indianapolis",lat:39.72,lon:-86.29},
+        {id:"KFWA",name:"Fort Wayne",lat:40.98,lon:-85.20},
+
+        // South Central / Texas
+        {id:"KMSY",name:"New Orleans",lat:29.99,lon:-90.26},{id:"KDFW",name:"Dallas-Fort Worth",lat:32.90,lon:-97.04},
+        {id:"KIAH",name:"Houston Intercontinental",lat:29.98,lon:-95.34},{id:"KAUS",name:"Austin",lat:30.19,lon:-97.67},
+        {id:"KSAT",name:"San Antonio",lat:29.53,lon:-98.47},{id:"KPHX",name:"Phoenix",lat:33.43,lon:-112.01},
+        {id:"KTUS",name:"Tucson",lat:32.12,lon:-110.94},{id:"KABQ",name:"Albuquerque",lat:35.04,lon:-106.61},
+        {id:"KLAS",name:"Las Vegas",lat:36.08,lon:-115.15},
+
+        // West
+        {id:"KDEN",name:"Denver",lat:39.86,lon:-104.67},{id:"KSLC",name:"Salt Lake City",lat:40.79,lon:-111.98},
+        {id:"KBOI",name:"Boise",lat:43.56,lon:-116.22},{id:"KSEA",name:"Seattle",lat:47.45,lon:-122.31},
+        {id:"KPDX",name:"Portland",lat:45.59,lon:-122.60},{id:"KGEG",name:"Spokane",lat:47.62,lon:-117.53},
+        {id:"KLAX",name:"Los Angeles",lat:33.94,lon:-118.41},{id:"KSAN",name:"San Diego",lat:32.73,lon:-117.19},
+        {id:"KSFO",name:"San Francisco",lat:37.62,lon:-122.38},{id:"KSJC",name:"San Jose",lat:37.36,lon:-121.93},
+        {id:"KSMF",name:"Sacramento",lat:38.70,lon:-121.59},
+
         // Alaska & Hawaii
-        {id:"PANC",name:"Anchorage",lat:61.17,lon:-150.00},{id:"PAFA",name:"Fairbanks",lat:64.82,lon:-147.86},
-        {id:"PAJN",name:"Juneau",lat:58.36,lon:-134.58},{id:"PHNL",name:"Honolulu",lat:21.32,lon:-157.92},
-        {id:"PHOG",name:"Kahului",lat:20.90,lon:-156.43},{id:"PHTO",name:"Hilo",lat:19.72,lon:-155.05}
+        {id:"PANC",name:"Anchorage",lat:61.17,lon:-150.00},{id:"PHNL",name:"Honolulu",lat:21.32,lon:-157.92}
     ];
 
     const CITIES = [
@@ -330,14 +331,12 @@
         {name:"Tulsa",lat:36.15,lon:-95.99,tier:1},{name:"Tampa",lat:27.95,lon:-82.46,tier:1},
         {name:"New Orleans",lat:29.95,lon:-90.07,tier:1},{name:"Cleveland",lat:41.50,lon:-81.69,tier:1},
         {name:"Salt Lake City",lat:40.76,lon:-111.89,tier:1},{name:"Boise",lat:43.62,lon:-116.20,tier:1},
-        {name:"Spokane",lat:47.66,lon:-117.43,tier:1},{name:"Billings",lat:45.78,lon:-108.50,tier:1},
-        {name:"St. Louis",lat:38.63,lon:-90.20,tier:1},{name:"Cincinnati",lat:39.10,lon:-84.51,tier:1},
-        {name:"Pittsburgh",lat:40.44,lon:-79.99,tier:1},{name:"Orlando",lat:28.54,lon:-81.38,tier:1},
-        {name:"Buffalo",lat:42.89,lon:-78.88,tier:1},{name:"Richmond",lat:37.54,lon:-77.44,tier:1},
-        {name:"Birmingham",lat:33.52,lon:-86.81,tier:1},{name:"Little Rock",lat:34.75,lon:-92.29,tier:1},
-        {name:"Des Moines",lat:41.59,lon:-93.62,tier:1},{name:"Jackson",lat:32.30,lon:-90.18,tier:1},
-        {name:"Providence",lat:41.82,lon:-71.42,tier:1},{name:"Honolulu",lat:21.31,lon:-157.86,tier:1},
-        {name:"Anchorage",lat:61.22,lon:-149.90,tier:1}
+        {name:"Spokane",lat:47.66,lon:-117.43,tier:1},{name:"St. Louis",lat:38.63,lon:-90.20,tier:1},
+        {name:"Cincinnati",lat:39.10,lon:-84.51,tier:1},{name:"Pittsburgh",lat:40.44,lon:-79.99,tier:1},
+        {name:"Orlando",lat:28.54,lon:-81.38,tier:1},{name:"Buffalo",lat:42.89,lon:-78.88,tier:1},
+        {name:"Richmond",lat:37.54,lon:-77.44,tier:1},{name:"Birmingham",lat:33.52,lon:-86.81,tier:1},
+        {name:"Little Rock",lat:34.75,lon:-92.29,tier:1},{name:"Des Moines",lat:41.59,lon:-93.62,tier:1},
+        {name:"Honolulu",lat:21.31,lon:-157.86,tier:1},{name:"Anchorage",lat:61.22,lon:-149.90,tier:1}
     ];
 
     let map, cityLayerGroup, tempLayerGroup, alertLayerGroup;
@@ -368,9 +367,23 @@
             tempFetchTimeout = setTimeout(fetchTemperaturesForView, 700);
         });
 
-        document.getElementById('toggleBtn').addEventListener('click', togglePanel);
-        document.getElementById('controlPanel').addEventListener('click', function(e) {
-            if (panelMinimized && e.target.closest('.panel-header')) togglePanel();
+        // Stronger minimize / expand handling
+        const toggleBtn = document.getElementById('toggleBtn');
+        const panelHeader = document.getElementById('panelHeader');
+        const controlPanel = document.getElementById('controlPanel');
+
+        toggleBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            togglePanel();
+        });
+
+        panelHeader.addEventListener('click', function(e) {
+            // Allow clicking the header area to toggle when minimized
+            if (panelMinimized) {
+                e.preventDefault();
+                togglePanel();
+            }
         });
 
         document.getElementById('satSelect').addEventListener('change', updateSatellite);
@@ -414,7 +427,9 @@
     function togglePanel() {
         const panel = document.getElementById('controlPanel');
         const btn = document.getElementById('toggleBtn');
+        
         panelMinimized = !panelMinimized;
+        
         if (panelMinimized) {
             panel.classList.add('minimized');
             btn.textContent = '+';
@@ -445,7 +460,7 @@
         document.getElementById('tempStatus').textContent = 'Updating...';
         tempLayerGroup.clearLayers();
 
-        const bounds = map.getBounds().pad(0.2);
+        const bounds = map.getBounds().pad(0.25);
         let candidates = STATIONS.filter(s => bounds.contains([s.lat, s.lon]));
 
         if (candidates.length > CONFIG.maxTempsToFetch) {
