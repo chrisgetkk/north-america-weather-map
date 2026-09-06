@@ -461,6 +461,7 @@
 
     function windText(deg, speedKt) {
         if (speedKt == null || isNaN(speedKt)) return '—';
+        if (speedKt < 0.5) return 'Calm';
         const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
         const idx = (deg == null || isNaN(deg)) ? null : Math.round(((deg % 360) / 22.5)) % 16;
         const dir = idx == null ? '' : dirs[idx] + ' ';
@@ -468,10 +469,17 @@
         return `${dir}${Math.round(speedKt)} kt (${mph} mph)`;
     }
 
-    // NWS windSpeed is m/s (unitCode wmoUnit:m_s-1). Convert to knots.
-    function nwsMsToKt(ms) {
-        if (ms == null || isNaN(ms)) return null;
-        return ms * 1.94384;
+    // Convert NWS quantitative value to knots using unitCode when available.
+    function nwsValueToKt(prop) {
+        if (!prop || prop.value == null || isNaN(prop.value)) return null;
+        const unit = (prop.unitCode || '').toLowerCase();
+        const v = Number(prop.value);
+        if (unit.includes('m_s-1') || unit.includes('m/s')) return v * 1.94384;       // m/s -> kt
+        if (unit.includes('km_h-1') || unit.includes('km/h')) return v * 0.539957;    // km/h -> kt
+        if (unit.includes('kt') || unit.includes('knot')) return v;                    // already kt
+        if (unit.includes('mi_h-1') || unit.includes('mph')) return v * 0.868976;     // mph -> kt
+        // Default NWS observation windSpeed is m/s
+        return v * 1.94384;
     }
 
     function buildUSPopup(r) {
@@ -480,9 +488,8 @@
         const dewC = p.dewpoint?.value != null ? Math.round(p.dewpoint.value) : null;
         const rh = p.relativeHumidity?.value != null ? Math.round(p.relativeHumidity.value) : null;
         const windDeg = p.windDirection?.value;
-        // NWS values are m/s
-        const windKt = nwsMsToKt(p.windSpeed?.value);
-        const windGustKt = nwsMsToKt(p.windGust?.value);
+        const windKt = nwsValueToKt(p.windSpeed);
+        const windGustKt = nwsValueToKt(p.windGust);
         const visMi = p.visibility?.value != null ? (p.visibility.value / 1609.34).toFixed(1) : null;
         const altIn = p.barometricPressure?.value != null ? (p.barometricPressure.value / 3386.39).toFixed(2) : null;
         const wx = p.textDescription || '';
@@ -495,6 +502,7 @@
         if (visMi) html += `<div class="row"><span class="label">Visibility</span><span class="value">${visMi} mi</span></div>`;
         if (altIn) html += `<div class="row"><span class="label">Pressure</span><span class="value">${altIn} in</span></div>`;
         if (wx) html += `<div class="wx">${wx}</div>`;
+        if (p.rawMessage) html += `<div style="margin-top:6px;font-size:11px;color:#334155;word-break:break-all;"><strong>METAR:</strong> ${p.rawMessage}</div>`;
         html += `<div style="margin-top:6px;font-size:11px;color:#64748b;">${new Date(r.timestamp).toLocaleString()}</div></div>`;
         return html;
     }
