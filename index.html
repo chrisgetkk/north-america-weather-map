@@ -84,7 +84,7 @@
         .alert-box {
             background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444;
             border-radius: 8px; padding: 8px 10px; margin-top: 10px;
-            font-size: 12px; max-height: 120px; overflow-y: auto;
+            font-size: 12px; max-height: 110px; overflow-y: auto;
         }
         .alert-box strong { color: #f87171; }
         .alert-item { margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid rgba(239,68,68,0.2); }
@@ -112,6 +112,15 @@
             background: rgba(15, 23, 42, 0.9); border: 1px solid #334155;
             border-radius: 8px; padding: 7px 12px; font-size: 11px; color: #94a3b8;
         }
+        .time-legend {
+            position: absolute; bottom: 22px; left: 50%; transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(15, 23, 42, 0.92); border: 1px solid #334155;
+            border-radius: 8px; padding: 6px 14px; font-size: 12px; color: #e2e8f0;
+            display: flex; gap: 18px; white-space: nowrap;
+        }
+        .time-legend span { color: #38bdf8; }
+        
         .leaflet-control-attribution {
             background: rgba(15, 23, 42, 0.85) !important; color: #64748b !important; font-size: 10px !important;
         }
@@ -125,9 +134,10 @@
         .obs-popup .value { font-weight: 600; color: #0f172a; }
         .obs-popup .wx { margin-top: 6px; padding-top: 6px; border-top: 1px solid #e2e8f0; font-style: italic; }
         
-        @media (max-width: 600px) {
+        @media (max-width: 700px) {
             .control-panel { width: 280px; top: 8px; right: 8px; }
-            .legend { font-size: 10px; padding: 5px 8px; }
+            .time-legend { font-size: 11px; gap: 10px; padding: 5px 10px; }
+            .legend { display: none; }
         }
     </style>
 </head>
@@ -151,17 +161,10 @@
                         <option value="goes_watervapor">Water Vapor</option>
                         <option value="goes_infrared">Infrared</option>
                     </optgroup>
-                    <optgroup label="Global (RainViewer)">
-                        <option value="global_infrared">Global Infrared</option>
-                        <option value="global_visible">Global Visible</option>
-                        <option value="global_watervapor">Global Water Vapor</option>
+                    <optgroup label="Global">
+                        <option value="global_infrared">Global Infrared (best effort)</option>
                     </optgroup>
                 </select>
-                <div class="btn-row">
-                    <button id="satPlayBtn" class="secondary">▶ Play</button>
-                    <button id="satPauseBtn" class="secondary">⏸ Pause</button>
-                </div>
-                <div class="radar-time" id="satTime">Satellite: —</div>
             </div>
             
             <div class="control-group">
@@ -174,7 +177,6 @@
                     <button id="playBtn" class="secondary">▶ Play</button>
                     <button id="pauseBtn" class="secondary">⏸ Pause</button>
                 </div>
-                <div class="radar-time" id="radarTime">Radar: —</div>
             </div>
             
             <div class="control-group">
@@ -200,67 +202,128 @@
             <div class="status">
                 <div>Temps: <span id="tempStatus">Loading...</span></div>
                 <div>Radar: <span id="radarStatus">Loading...</span></div>
-                <div>Satellite: <span id="satStatus">Loading...</span></div>
+                <div>Satellite: <span id="satStatus">—</span></div>
                 <div>Alerts: <span id="alertStatus">Loading...</span></div>
                 <div>Last update: <span id="lastUpdate">—</span></div>
-                <div style="margin-top:8px;font-size:10px;color:#475569;">
-                    Free data • Click temp circles for full observation
-                </div>
             </div>
         </div>
     </div>
     
-    <div class="legend">Zoom in for denser temps • Click circles for full details</div>
+    <div class="legend">Click temp circles for full observation details</div>
+    <div class="time-legend">
+        <div>Radar: <span id="radarTimeLabel">—</span></div>
+        <div>Satellite: <span id="satTimeLabel">—</span></div>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
     <script>
     const CONFIG = {
-        defaultCenter: [39.0, -86.0],
+        defaultCenter: [39.5, -93.0],
         defaultZoom: 5,
         minZoom: 2,
         maxZoom: 12,
         tempRefreshMs: 6 * 60 * 1000,
         radarRefreshMs: 3 * 60 * 1000,
         alertRefreshMs: 4 * 60 * 1000,
-        satRefreshMs: 5 * 60 * 1000,
-        userAgent: "LiveWeatherMap/3.1 (personal use)",
+        userAgent: "LiveWeatherMap/3.2 (personal use)",
         radarOpacity: 0.65,
         satelliteOpacity: 0.6,
         radarFramesToKeep: 12,
-        maxTempsToFetch: 100
+        maxTempsToFetch: 110
     };
 
-    // US stations (kept from your working version)
+    // US stations - denser Plains + Minnesota + existing eastern core
     const US_STATIONS = [
-        {id:"KCMH",name:"Columbus John Glenn",lat:39.99,lon:-82.88},{id:"KOSU",name:"Ohio State",lat:40.08,lon:-83.07},
-        {id:"KLCK",name:"Rickenbacker",lat:39.81,lon:-82.93},{id:"KTZR",name:"Bolton Field",lat:39.90,lon:-83.14},
-        {id:"KDAY",name:"Dayton",lat:39.90,lon:-84.22},{id:"KCAK",name:"Akron-Canton",lat:40.92,lon:-81.44},
-        {id:"KCLE",name:"Cleveland",lat:41.41,lon:-81.85},{id:"KTOL",name:"Toledo",lat:41.59,lon:-83.80},
-        {id:"KCVG",name:"Cincinnati CVG",lat:39.05,lon:-84.67},{id:"KLUK",name:"Cincinnati Lunken",lat:39.10,lon:-84.42},
-        {id:"KIND",name:"Indianapolis",lat:39.72,lon:-86.29},{id:"KFWA",name:"Fort Wayne",lat:40.98,lon:-85.20},
-        {id:"KSBN",name:"South Bend",lat:41.71,lon:-86.32},{id:"KEVV",name:"Evansville",lat:38.04,lon:-87.53},
-        {id:"KDTW",name:"Detroit Metro",lat:42.21,lon:-83.35},{id:"KGRR",name:"Grand Rapids",lat:42.88,lon:-85.52},
-        {id:"KORD",name:"Chicago O'Hare",lat:41.98,lon:-87.90},{id:"KMDW",name:"Chicago Midway",lat:41.79,lon:-87.75},
-        {id:"KMKE",name:"Milwaukee",lat:42.95,lon:-87.90},{id:"KMSP",name:"Minneapolis",lat:44.88,lon:-93.22},
-        {id:"KDSM",name:"Des Moines",lat:41.53,lon:-93.66},{id:"KOMA",name:"Omaha",lat:41.30,lon:-95.89},
-        {id:"KSTL",name:"St. Louis",lat:38.75,lon:-90.37},{id:"KMCI",name:"Kansas City",lat:39.30,lon:-94.71},
-        {id:"KJFK",name:"New York JFK",lat:40.64,lon:-73.78},{id:"KLGA",name:"LaGuardia",lat:40.78,lon:-73.87},
-        {id:"KEWR",name:"Newark",lat:40.69,lon:-74.17},{id:"KBOS",name:"Boston",lat:42.36,lon:-71.01},
-        {id:"KPHL",name:"Philadelphia",lat:39.87,lon:-75.24},{id:"KPIT",name:"Pittsburgh",lat:40.49,lon:-80.23},
-        {id:"KBUF",name:"Buffalo",lat:42.94,lon:-78.73},{id:"KDCA",name:"Washington Reagan",lat:38.85,lon:-77.04},
-        {id:"KIAD",name:"Dulles",lat:38.95,lon:-77.46},{id:"KBWI",name:"Baltimore",lat:39.18,lon:-76.67},
-        {id:"KRIC",name:"Richmond",lat:37.51,lon:-77.32},{id:"KCLT",name:"Charlotte",lat:35.21,lon:-80.94},
-        {id:"KRDU",name:"Raleigh",lat:35.88,lon:-78.79},{id:"KATL",name:"Atlanta",lat:33.64,lon:-84.43},
-        {id:"KBNA",name:"Nashville",lat:36.12,lon:-86.68},{id:"KMEM",name:"Memphis",lat:35.04,lon:-89.98},
-        {id:"KSDF",name:"Louisville",lat:38.17,lon:-85.74},{id:"KBHM",name:"Birmingham",lat:33.56,lon:-86.75},
-        {id:"KMSY",name:"New Orleans",lat:29.99,lon:-90.26},{id:"KMIA",name:"Miami",lat:25.80,lon:-80.29},
-        {id:"KMCO",name:"Orlando",lat:28.43,lon:-81.31},{id:"KTPA",name:"Tampa",lat:27.98,lon:-82.53},
-        {id:"KJAX",name:"Jacksonville",lat:30.49,lon:-81.69},{id:"KIAH",name:"Houston",lat:29.98,lon:-95.34},
-        {id:"KDFW",name:"Dallas-Fort Worth",lat:32.90,lon:-97.04},{id:"KAUS",name:"Austin",lat:30.19,lon:-97.67},
-        {id:"KSAT",name:"San Antonio",lat:29.53,lon:-98.47},{id:"KDEN",name:"Denver",lat:39.86,lon:-104.67},
-        {id:"KPHX",name:"Phoenix",lat:33.43,lon:-112.01},{id:"KLAS",name:"Las Vegas",lat:36.08,lon:-115.15},
-        {id:"KSEA",name:"Seattle",lat:47.45,lon:-122.31},{id:"KLAX",name:"Los Angeles",lat:33.94,lon:-118.41},
-        {id:"KSFO",name:"San Francisco",lat:37.62,lon:-122.38},{id:"KOKC",name:"Oklahoma City",lat:35.39,lon:-97.60}
+        // Minnesota
+        {id:"KMSP",name:"Minneapolis",lat:44.88,lon:-93.22},
+        {id:"KSTP",name:"St Paul Downtown",lat:44.93,lon:-93.06},
+        {id:"KFCM",name:"Flying Cloud",lat:44.83,lon:-93.46},
+        {id:"KMIC",name:"Crystal MN",lat:45.06,lon:-93.35},
+        {id:"KRST",name:"Rochester MN",lat:43.91,lon:-92.50},
+        {id:"KDLH",name:"Duluth",lat:46.84,lon:-92.19},
+        {id:"KBRD",name:"Brainerd",lat:46.40,lon:-94.13},
+        {id:"KAXN",name:"Alexandria MN",lat:45.87,lon:-95.39},
+        {id:"KSTC",name:"St Cloud",lat:45.55,lon:-94.06},
+        {id:"KBJI",name:"Bemidji",lat:47.51,lon:-94.93},
+        {id:"KINL",name:"International Falls",lat:48.57,lon:-93.40},
+        {id:"KHIB",name:"Hibbing",lat:47.39,lon:-92.84},
+        // Dakotas
+        {id:"KFAR",name:"Fargo",lat:46.92,lon:-96.82},
+        {id:"KBIS",name:"Bismarck",lat:46.77,lon:-100.75},
+        {id:"KMOT",name:"Minot",lat:48.26,lon:-101.28},
+        {id:"KGFK",name:"Grand Forks",lat:47.95,lon:-97.18},
+        {id:"KJMS",name:"Jamestown ND",lat:46.93,lon:-98.68},
+        {id:"KFSD",name:"Sioux Falls",lat:43.58,lon:-96.74},
+        {id:"KRAP",name:"Rapid City",lat:44.05,lon:-103.06},
+        {id:"KPIR",name:"Pierre",lat:44.38,lon:-100.29},
+        {id:"KABR",name:"Aberdeen SD",lat:45.45,lon:-98.42},
+        // Iowa / Nebraska
+        {id:"KDSM",name:"Des Moines",lat:41.53,lon:-93.66},
+        {id:"KCID",name:"Cedar Rapids",lat:41.88,lon:-91.71},
+        {id:"KDBQ",name:"Dubuque",lat:42.40,lon:-90.70},
+        {id:"KALO",name:"Waterloo",lat:42.56,lon:-92.40},
+        {id:"KSUX",name:"Sioux City",lat:42.40,lon:-96.38},
+        {id:"KOMA",name:"Omaha",lat:41.30,lon:-95.89},
+        {id:"KLNK",name:"Lincoln",lat:40.85,lon:-96.76},
+        {id:"KGRI",name:"Grand Island",lat:40.97,lon:-98.31},
+        {id:"KLBF",name:"North Platte",lat:41.13,lon:-100.68},
+        {id:"KBFF",name:"Scottsbluff",lat:41.87,lon:-103.60},
+        // Kansas / Oklahoma / Missouri
+        {id:"KICT",name:"Wichita",lat:37.65,lon:-97.43},
+        {id:"KTOP",name:"Topeka",lat:39.07,lon:-95.62},
+        {id:"KGCK",name:"Garden City",lat:37.93,lon:-100.72},
+        {id:"KHYS",name:"Hays",lat:38.84,lon:-99.27},
+        {id:"KOKC",name:"Oklahoma City",lat:35.39,lon:-97.60},
+        {id:"KTUL",name:"Tulsa",lat:36.20,lon:-95.89},
+        {id:"KWTO",name:"Stillwater",lat:36.16,lon:-97.09},
+        {id:"KLTS",name:"Altus AFB",lat:34.67,lon:-99.27},
+        {id:"KSTL",name:"St. Louis",lat:38.75,lon:-90.37},
+        {id:"KMCI",name:"Kansas City",lat:39.30,lon:-94.71},
+        {id:"KSGF",name:"Springfield MO",lat:37.24,lon:-93.39},
+        {id:"KCOU",name:"Columbia MO",lat:38.82,lon:-92.22},
+        // Existing core (Midwest / East / Gulf)
+        {id:"KCMH",name:"Columbus John Glenn",lat:39.99,lon:-82.88},
+        {id:"KOSU",name:"Ohio State",lat:40.08,lon:-83.07},
+        {id:"KLCK",name:"Rickenbacker",lat:39.81,lon:-82.93},
+        {id:"KTZR",name:"Bolton Field",lat:39.90,lon:-83.14},
+        {id:"KDAY",name:"Dayton",lat:39.90,lon:-84.22},
+        {id:"KCLE",name:"Cleveland",lat:41.41,lon:-81.85},
+        {id:"KCVG",name:"Cincinnati CVG",lat:39.05,lon:-84.67},
+        {id:"KIND",name:"Indianapolis",lat:39.72,lon:-86.29},
+        {id:"KDTW",name:"Detroit Metro",lat:42.21,lon:-83.35},
+        {id:"KORD",name:"Chicago O'Hare",lat:41.98,lon:-87.90},
+        {id:"KMDW",name:"Chicago Midway",lat:41.79,lon:-87.75},
+        {id:"KMKE",name:"Milwaukee",lat:42.95,lon:-87.90},
+        {id:"KJFK",name:"New York JFK",lat:40.64,lon:-73.78},
+        {id:"KLGA",name:"LaGuardia",lat:40.78,lon:-73.87},
+        {id:"KEWR",name:"Newark",lat:40.69,lon:-74.17},
+        {id:"KBOS",name:"Boston",lat:42.36,lon:-71.01},
+        {id:"KPHL",name:"Philadelphia",lat:39.87,lon:-75.24},
+        {id:"KPIT",name:"Pittsburgh",lat:40.49,lon:-80.23},
+        {id:"KDCA",name:"Washington Reagan",lat:38.85,lon:-77.04},
+        {id:"KIAD",name:"Dulles",lat:38.95,lon:-77.46},
+        {id:"KBWI",name:"Baltimore",lat:39.18,lon:-76.67},
+        {id:"KCLT",name:"Charlotte",lat:35.21,lon:-80.94},
+        {id:"KRDU",name:"Raleigh",lat:35.88,lon:-78.79},
+        {id:"KATL",name:"Atlanta",lat:33.64,lon:-84.43},
+        {id:"KBNA",name:"Nashville",lat:36.12,lon:-86.68},
+        {id:"KMEM",name:"Memphis",lat:35.04,lon:-89.98},
+        {id:"KSDF",name:"Louisville",lat:38.17,lon:-85.74},
+        {id:"KMSY",name:"New Orleans",lat:29.99,lon:-90.26},
+        {id:"KMIA",name:"Miami",lat:25.80,lon:-80.29},
+        {id:"KMCO",name:"Orlando",lat:28.43,lon:-81.31},
+        {id:"KTPA",name:"Tampa",lat:27.98,lon:-82.53},
+        {id:"KJAX",name:"Jacksonville",lat:30.49,lon:-81.69},
+        {id:"KIAH",name:"Houston",lat:29.98,lon:-95.34},
+        {id:"KDFW",name:"Dallas-Fort Worth",lat:32.90,lon:-97.04},
+        {id:"KAUS",name:"Austin",lat:30.19,lon:-97.67},
+        {id:"KSAT",name:"San Antonio",lat:29.53,lon:-98.47},
+        {id:"KDEN",name:"Denver",lat:39.86,lon:-104.67},
+        {id:"KPHX",name:"Phoenix",lat:33.43,lon:-112.01},
+        {id:"KLAS",name:"Las Vegas",lat:36.08,lon:-115.15},
+        {id:"KSEA",name:"Seattle",lat:47.45,lon:-122.31},
+        {id:"KLAX",name:"Los Angeles",lat:33.94,lon:-118.41},
+        {id:"KSFO",name:"San Francisco",lat:37.62,lon:-122.38}
     ];
 
     const WORLD_STATIONS = [
@@ -280,24 +343,22 @@
     ];
 
     const CITIES = [
-        {name:"New York",lat:40.71,lon:-74.01,tier:1},{name:"Chicago",lat:41.88,lon:-87.63,tier:1},
-        {name:"Houston",lat:29.76,lon:-95.37,tier:1},{name:"Columbus",lat:39.96,lon:-83.00,tier:1},
-        {name:"Atlanta",lat:33.75,lon:-84.39,tier:1},{name:"Miami",lat:25.76,lon:-80.19,tier:1},
-        {name:"Dallas",lat:32.78,lon:-96.80,tier:1},{name:"Washington",lat:38.91,lon:-77.04,tier:1},
-        {name:"Boston",lat:42.36,lon:-71.06,tier:1},{name:"Detroit",lat:42.33,lon:-83.05,tier:1},
-        {name:"London",lat:51.51,lon:-0.13,tier:1},{name:"Paris",lat:48.86,lon:2.35,tier:1},
-        {name:"São Paulo",lat:-23.55,lon:-46.63,tier:1},{name:"Rio de Janeiro",lat:-22.91,lon:-43.17,tier:1}
+        {name:"New York",lat:40.71,lon:-74.01},{name:"Chicago",lat:41.88,lon:-87.63},
+        {name:"Houston",lat:29.76,lon:-95.37},{name:"Columbus",lat:39.96,lon:-83.00},
+        {name:"Atlanta",lat:33.75,lon:-84.39},{name:"Miami",lat:25.76,lon:-80.19},
+        {name:"Dallas",lat:32.78,lon:-96.80},{name:"Minneapolis",lat:44.98,lon:-93.27},
+        {name:"Kansas City",lat:39.10,lon:-94.58},{name:"Oklahoma City",lat:35.47,lon:-97.52},
+        {name:"Denver",lat:39.74,lon:-104.99},{name:"London",lat:51.51,lon:-0.13},
+        {name:"Paris",lat:48.86,lon:2.35},{name:"São Paulo",lat:-23.55,lon:-46.63},
+        {name:"Rio de Janeiro",lat:-22.91,lon:-43.17}
     ];
 
     let map, cityLayerGroup, tempLayerGroup, alertLayerGroup;
     let radarLayer = null, satLayer = null;
-    let satFrames = [], currentSatFrameIndex = 0, satPlaying = false, satTimer = null;
     let radarFrames = [], currentFrameIndex = 0, radarPlaying = false, radarTimer = null;
     let rainviewerHost = "https://tilecache.rainviewer.com";
-    let rainviewerData = null;
     let tempFetchTimeout = null;
     let panelMinimized = false;
-    let currentSatType = 'none';
 
     function initMap() {
         map = L.map('map', {
@@ -333,7 +394,7 @@
                 stopRadarLoop();
                 if (radarLayer) { map.removeLayer(radarLayer); radarLayer = null; }
                 document.getElementById('radarStatus').textContent = 'Off';
-                document.getElementById('radarTime').textContent = 'Radar: Off';
+                document.getElementById('radarTimeLabel').textContent = 'Off';
             } else loadRadarFrames();
         });
         document.getElementById('tempSelect').addEventListener('change', () => {
@@ -351,8 +412,6 @@
 
         document.getElementById('playBtn').addEventListener('click', startRadarLoop);
         document.getElementById('pauseBtn').addEventListener('click', stopRadarLoop);
-        document.getElementById('satPlayBtn').addEventListener('click', startSatLoop);
-        document.getElementById('satPauseBtn').addEventListener('click', stopSatLoop);
         document.getElementById('refreshBtn').addEventListener('click', () => {
             fetchTemperaturesForView(); loadRadarFrames(); fetchAlerts(); loadSatellite();
         });
@@ -365,7 +424,6 @@
         setInterval(fetchTemperaturesForView, CONFIG.tempRefreshMs);
         setInterval(loadRadarFrames, CONFIG.radarRefreshMs);
         setInterval(fetchAlerts, CONFIG.alertRefreshMs);
-        setInterval(loadSatellite, CONFIG.satRefreshMs);
     }
 
     function togglePanel() {
@@ -386,12 +444,10 @@
     function updateCityLabels() {
         cityLayerGroup.clearLayers();
         CITIES.forEach(city => {
-            if (city.tier === 1) {
-                const icon = L.divIcon({
-                    className: 'city-label major', html: city.name, iconSize: [0,0], iconAnchor: [0,0]
-                });
-                L.marker([city.lat, city.lon], {icon, interactive:false}).addTo(cityLayerGroup);
-            }
+            const icon = L.divIcon({
+                className: 'city-label major', html: city.name, iconSize: [0,0], iconAnchor: [0,0]
+            });
+            L.marker([city.lat, city.lon], {icon, interactive:false}).addTo(cityLayerGroup);
         });
     }
 
@@ -399,8 +455,7 @@
         if (deg == null || speedKt == null) return '—';
         const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
         const idx = Math.round(((deg % 360) / 22.5)) % 16;
-        const mph = Math.round(speedKt * 1.15078);
-        return `${dirs[idx]} ${Math.round(speedKt)} kt (${mph} mph)`;
+        return `${dirs[idx]} ${Math.round(speedKt)} kt (${Math.round(speedKt * 1.15078)} mph)`;
     }
 
     function buildUSPopup(r) {
@@ -411,11 +466,9 @@
         const windDeg = p.windDirection?.value;
         const windKt = p.windSpeed?.value != null ? p.windSpeed.value / 0.514444 : null;
         const windGustKt = p.windGust?.value != null ? p.windGust.value / 0.514444 : null;
-        const visM = p.visibility?.value;
-        const visMi = visM != null ? (visM / 1609.34).toFixed(1) : null;
+        const visMi = p.visibility?.value != null ? (p.visibility.value / 1609.34).toFixed(1) : null;
         const altIn = p.barometricPressure?.value != null ? (p.barometricPressure.value / 3386.39).toFixed(2) : null;
         const wx = p.textDescription || '';
-
         let html = `<div class="obs-popup"><h3>${r.station.name}</h3>
             <div class="row"><span class="label">Temperature</span><span class="value">${r.tempF}°F (${r.tempC}°C)</span></div>`;
         if (dewF != null) html += `<div class="row"><span class="label">Dew Point</span><span class="value">${dewF}°F (${dewC}°C)</span></div>`;
@@ -458,7 +511,7 @@
             const center = map.getCenter();
             usCandidates.sort((a,b) => Math.hypot(a.lat-center.lat,a.lon-center.lng) - Math.hypot(b.lat-center.lat,b.lon-center.lng));
             worldCandidates.sort((a,b) => Math.hypot(a.lat-center.lat,a.lon-center.lng) - Math.hypot(b.lat-center.lat,b.lon-center.lng));
-            usCandidates = usCandidates.slice(0, 70);
+            usCandidates = usCandidates.slice(0, 80);
             worldCandidates = worldCandidates.slice(0, 30);
         }
 
@@ -516,13 +569,11 @@
         document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
     }
 
-    // ===== RADAR =====
     async function loadRadarFrames() {
         if (document.getElementById('radarSelect').value !== 'on') return;
         try {
             const resp = await fetch('https://api.rainviewer.com/public/weather-maps.json');
             const api = await resp.json();
-            rainviewerData = api;
             rainviewerHost = api.host || rainviewerHost;
             if (!api.radar?.past?.length) {
                 document.getElementById('radarStatus').textContent = 'No data';
@@ -545,30 +596,19 @@
         const url = rainviewerHost + frame.path + '/256/{z}/{x}/{y}/2/1_1.png';
         if (radarLayer) map.removeLayer(radarLayer);
         radarLayer = L.tileLayer(url, { opacity: CONFIG.radarOpacity, zIndex: 200, maxNativeZoom: 7, maxZoom: 12 }).addTo(map);
-        document.getElementById('radarTime').textContent = 'Radar: ' + new Date(frame.time * 1000).toLocaleTimeString();
+        const t = new Date(frame.time * 1000).toLocaleTimeString();
+        document.getElementById('radarTimeLabel').textContent = t;
         document.getElementById('radarStatus').textContent = (index+1) + '/' + radarFrames.length;
-    }
-
-    function preloadRadarFrame(index) {
-        if (!radarFrames.length) return;
-        const frame = radarFrames[index % radarFrames.length];
-        const url = rainviewerHost + frame.path + '/256/0/0/0/2/1_1.png';
-        const img = new Image();
-        img.src = url;
     }
 
     function startRadarLoop() {
         if (radarPlaying || radarFrames.length < 2) return;
         radarPlaying = true;
         document.getElementById('playBtn').style.opacity = '0.5';
-        // Preload a couple frames ahead for smoother playback
-        preloadRadarFrame(currentFrameIndex + 1);
-        preloadRadarFrame(currentFrameIndex + 2);
         radarTimer = setInterval(() => {
             currentFrameIndex = (currentFrameIndex + 1) % radarFrames.length;
             showRadarFrame(currentFrameIndex);
-            preloadRadarFrame(currentFrameIndex + 2);
-        }, 900); // slower = smoother
+        }, 550);
     }
 
     function stopRadarLoop() {
@@ -578,126 +618,62 @@
         document.getElementById('playBtn').style.opacity = '1';
     }
 
-    // ===== SATELLITE (fixed) =====
-    async function loadSatellite() {
-        stopSatLoop();
+    function loadSatellite() {
         const choice = document.getElementById('satSelect').value;
-        currentSatType = choice;
-
         if (satLayer) { map.removeLayer(satLayer); satLayer = null; }
-        satFrames = [];
 
         if (choice === 'none') {
             document.getElementById('satStatus').textContent = 'Off';
-            document.getElementById('satTime').textContent = 'Satellite: —';
+            document.getElementById('satTimeLabel').textContent = '—';
             return;
         }
 
-        // Global layers via RainViewer
-        if (choice.startsWith('global_')) {
-            try {
-                if (!rainviewerData) {
-                    const resp = await fetch('https://api.rainviewer.com/public/weather-maps.json');
-                    rainviewerData = await resp.json();
-                    rainviewerHost = rainviewerData.host || rainviewerHost;
-                }
-
-                let frames = [];
-                if (choice === 'global_infrared' && rainviewerData.satellite?.infrared) {
-                    frames = rainviewerData.satellite.infrared;
-                } else if (choice === 'global_visible' && rainviewerData.satellite?.visible) {
-                    frames = rainviewerData.satellite.visible;
-                } else if (choice === 'global_watervapor' && rainviewerData.satellite?.water_vapor) {
-                    frames = rainviewerData.satellite.water_vapor;
-                }
-
-                // Fallback: many RainViewer responses only have infrared
-                if (!frames.length && rainviewerData.satellite?.infrared) {
-                    frames = rainviewerData.satellite.infrared;
-                    document.getElementById('satStatus').textContent = 'IR fallback';
-                }
-
-                if (!frames.length) {
-                    document.getElementById('satStatus').textContent = 'No global data';
-                    document.getElementById('satTime').textContent = 'Satellite: Unavailable';
-                    return;
-                }
-
-                satFrames = frames.slice(-8); // last 8 frames
-                currentSatFrameIndex = satFrames.length - 1;
-                showGlobalSatFrame(currentSatFrameIndex);
-                document.getElementById('satStatus').textContent = satFrames.length + ' frames';
-            } catch(e) {
-                document.getElementById('satStatus').textContent = 'Error';
-            }
+        if (choice === 'global_infrared') {
+            // Best-effort global IR from RainViewer
+            fetch('https://api.rainviewer.com/public/weather-maps.json')
+                .then(r => r.json())
+                .then(api => {
+                    const frames = api.satellite?.infrared || [];
+                    if (!frames.length) {
+                        document.getElementById('satStatus').textContent = 'Unavailable';
+                        document.getElementById('satTimeLabel').textContent = 'No data';
+                        return;
+                    }
+                    const frame = frames[frames.length - 1];
+                    const host = api.host || rainviewerHost;
+                    satLayer = L.tileLayer(host + frame.path + '/256/{z}/{x}/{y}/0/0_0.png', {
+                        opacity: CONFIG.satelliteOpacity, zIndex: 100, maxNativeZoom: 7, maxZoom: 10
+                    }).addTo(map);
+                    const t = frame.time ? new Date(frame.time * 1000).toLocaleTimeString() : 'Latest';
+                    document.getElementById('satTimeLabel').textContent = t;
+                    document.getElementById('satStatus').textContent = 'Global IR';
+                })
+                .catch(() => {
+                    document.getElementById('satStatus').textContent = 'Error';
+                    document.getElementById('satTimeLabel').textContent = 'Error';
+                });
             return;
         }
 
-        // GOES-East (US) – use static recent image approach for reliability
-        if (choice.startsWith('goes_')) {
-            const channelMap = {
-                goes_visible: 'conus_ch02',
-                goes_shortwave: 'conus_ch07',
-                goes_watervapor: 'conus_ch09',
-                goes_infrared: 'conus_ch13'
-            };
-            const layer = channelMap[choice];
-            if (!layer) return;
+        // GOES-East single reliable frame
+        const channelMap = {
+            goes_visible: 'conus_ch02',
+            goes_shortwave: 'conus_ch07',
+            goes_watervapor: 'conus_ch09',
+            goes_infrared: 'conus_ch13'
+        };
+        const layer = channelMap[choice];
+        if (!layer) return;
 
-            // Single reliable recent frame (less choppy than forced multi-time)
-            satLayer = L.tileLayer.wms('https://mesonet.agron.iastate.edu/cgi-bin/wms/goes_east.cgi?', {
-                layers: layer,
-                format: 'image/png',
-                transparent: true,
-                opacity: CONFIG.satelliteOpacity,
-                attribution: 'GOES-East © Iowa State / NOAA',
-                zIndex: 100
-            }).addTo(map);
-
-            document.getElementById('satTime').textContent = 'Satellite: GOES latest';
-            document.getElementById('satStatus').textContent = 'Live';
-            satFrames = []; // no loop for GOES in this reliable mode
-        }
-    }
-
-    function showGlobalSatFrame(index) {
-        if (!satFrames.length) return;
-        index = Math.max(0, Math.min(index, satFrames.length - 1));
-        currentSatFrameIndex = index;
-        const frame = satFrames[index];
-        const url = rainviewerHost + frame.path + '/256/{z}/{x}/{y}/0/0_0.png';
-
-        if (satLayer) map.removeLayer(satLayer);
-        satLayer = L.tileLayer(url, {
-            opacity: CONFIG.satelliteOpacity,
-            zIndex: 100,
-            maxNativeZoom: 7,
-            maxZoom: 10
+        satLayer = L.tileLayer.wms('https://mesonet.agron.iastate.edu/cgi-bin/wms/goes_east.cgi?', {
+            layers: layer, format: 'image/png', transparent: true,
+            opacity: CONFIG.satelliteOpacity, attribution: 'GOES-East © Iowa State / NOAA', zIndex: 100
         }).addTo(map);
 
-        const timeStr = frame.time ? new Date(frame.time * 1000).toLocaleTimeString() : '';
-        document.getElementById('satTime').textContent = 'Satellite: ' + timeStr;
-        document.getElementById('satStatus').textContent = (index+1) + '/' + satFrames.length;
+        document.getElementById('satTimeLabel').textContent = 'GOES latest';
+        document.getElementById('satStatus').textContent = 'US GOES';
     }
 
-    function startSatLoop() {
-        if (satPlaying || satFrames.length < 2) return;
-        satPlaying = true;
-        document.getElementById('satPlayBtn').style.opacity = '0.5';
-        satTimer = setInterval(() => {
-            currentSatFrameIndex = (currentSatFrameIndex + 1) % satFrames.length;
-            showGlobalSatFrame(currentSatFrameIndex);
-        }, 1000); // smoother satellite loop
-    }
-
-    function stopSatLoop() {
-        satPlaying = false;
-        if (satTimer) clearInterval(satTimer);
-        satTimer = null;
-        document.getElementById('satPlayBtn').style.opacity = '1';
-    }
-
-    // ===== ALERTS =====
     async function fetchAlerts() {
         if (document.getElementById('alertSelect').value !== 'on') return;
         document.getElementById('alertStatus').textContent = 'Updating...';
