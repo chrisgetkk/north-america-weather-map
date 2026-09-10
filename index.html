@@ -91,11 +91,31 @@
         .alert-item:last-child { border-bottom: none; margin-bottom: 0; }
         
         .temp-marker {
-            background: rgba(15, 23, 42, 0.9); border: 2px solid #38bdf8; border-radius: 50%;
-            color: #fff; font-weight: 700; font-size: 12px; text-align: center;
-            line-height: 30px; width: 34px !important; height: 34px !important;
+            background: rgba(15, 23, 42, 0.92);
+            border: 2px solid #38bdf8;
+            border-radius: 10px;
+            color: #fff;
+            font-weight: 700;
+            font-size: 12px;
+            text-align: center;
+            line-height: 1.15;
+            width: 44px !important;
+            height: 40px !important;
             box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding-top: 2px;
         }
+        .temp-marker .diff {
+            font-size: 10px;
+            font-weight: 700;
+            line-height: 1;
+        }
+        .temp-marker .diff.pos { color: #fca5a5; }
+        .temp-marker .diff.neg { color: #93c5fd; }
+        .temp-marker .diff.zero { color: #cbd5e1; }
         .temp-marker.hot  { border-color: #ef4444; background: rgba(127, 29, 29, 0.92); }
         .temp-marker.warm { border-color: #f97316; }
         .temp-marker.cool { border-color: #3b82f6; }
@@ -125,7 +145,6 @@
             background: rgba(15, 23, 42, 0.85) !important; color: #64748b !important; font-size: 10px !important;
         }
         .leaflet-control-attribution a { color: #38bdf8 !important; }
-        .radar-time { font-size: 11px; color: #94a3b8; text-align: center; margin-top: 4px; }
         
         .obs-popup { font-size: 13px; line-height: 1.45; min-width: 220px; }
         .obs-popup h3 { margin: 0 0 6px 0; font-size: 15px; color: #0f172a; }
@@ -155,15 +174,11 @@
                 <label>Satellite Layer</label>
                 <select id="satSelect">
                     <option value="none">None</option>
-                    <optgroup label="GOES-East (US)">
-                        <option value="goes_visible">Visible</option>
-                        <option value="goes_shortwave">Shortwave IR</option>
-                        <option value="goes_watervapor">Water Vapor</option>
-                        <option value="goes_infrared">Infrared</option>
-                    </optgroup>
-                    <optgroup label="Global">
-                        <option value="global_infrared">Global Infrared (best effort)</option>
-                    </optgroup>
+                    <option value="goes_visible">GOES Visible</option>
+                    <option value="goes_shortwave">GOES Shortwave IR</option>
+                    <option value="goes_watervapor">GOES Water Vapor</option>
+                    <option value="goes_infrared">GOES Infrared</option>
+                    <option value="global_infrared">Global Infrared</option>
                 </select>
             </div>
             
@@ -188,7 +203,7 @@
             <div class="control-group">
                 <label>Temperature Markers</label>
                 <select id="tempSelect">
-                    <option value="on" selected>On (Smart / View-based)</option>
+                    <option value="on" selected>On (with forecast diff)</option>
                     <option value="off">Off</option>
                 </select>
             </div>
@@ -207,6 +222,7 @@
             
             <div class="status">
                 <div>Temps: <span id="tempStatus">Loading...</span></div>
+                <div>Forecast file: <span id="forecastStatus">Loading...</span></div>
                 <div>Radar: <span id="radarStatus">Loading...</span></div>
                 <div>Satellite: <span id="satStatus">—</span></div>
                 <div>Alerts: <span id="alertStatus">Loading...</span></div>
@@ -215,7 +231,7 @@
         </div>
     </div>
     
-    <div class="legend">Click temp circles for full observation details</div>
+    <div class="legend">Small number = live temp − WSI forecast (same hour)</div>
     <div class="time-legend">
         <div>Radar: <span id="radarTimeLabel">—</span></div>
         <div>Satellite: <span id="satTimeLabel">—</span></div>
@@ -224,106 +240,65 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
     <script>
     const CONFIG = {
-        defaultCenter: [39.5, -93.0],
+        defaultCenter: [39.5, -86.0],
         defaultZoom: 5,
         minZoom: 2,
         maxZoom: 12,
         tempRefreshMs: 6 * 60 * 1000,
         radarRefreshMs: 3 * 60 * 1000,
         alertRefreshMs: 4 * 60 * 1000,
-        userAgent: "LiveWeatherMap/3.2 (personal use)",
+        userAgent: "LiveWeatherMap/3.3 (personal use)",
         radarOpacity: 0.65,
         satelliteOpacity: 0.6,
         radarFramesToKeep: 12,
-        maxTempsToFetch: 110
+        maxTempsToFetch: 100,
+        forecastUrl: "data/forecast-hourly.json"
     };
 
-    // US stations - denser Plains + Minnesota + existing eastern core
     const US_STATIONS = [
-        // Minnesota
-        {id:"KMSP",name:"Minneapolis",lat:44.88,lon:-93.22},
-        {id:"KSTP",name:"St Paul Downtown",lat:44.93,lon:-93.06},
-        {id:"KFCM",name:"Flying Cloud",lat:44.83,lon:-93.46},
-        {id:"KMIC",name:"Crystal MN",lat:45.06,lon:-93.35},
-        {id:"KRST",name:"Rochester MN",lat:43.91,lon:-92.50},
-        {id:"KDLH",name:"Duluth",lat:46.84,lon:-92.19},
-        {id:"KBRD",name:"Brainerd",lat:46.40,lon:-94.13},
-        {id:"KAXN",name:"Alexandria MN",lat:45.87,lon:-95.39},
-        {id:"KSTC",name:"St Cloud",lat:45.55,lon:-94.06},
-        {id:"KBJI",name:"Bemidji",lat:47.51,lon:-94.93},
-        {id:"KINL",name:"International Falls",lat:48.57,lon:-93.40},
-        {id:"KHIB",name:"Hibbing",lat:47.39,lon:-92.84},
-        // Dakotas
-        {id:"KFAR",name:"Fargo",lat:46.92,lon:-96.82},
-        {id:"KBIS",name:"Bismarck",lat:46.77,lon:-100.75},
-        {id:"KMOT",name:"Minot",lat:48.26,lon:-101.28},
-        {id:"KGFK",name:"Grand Forks",lat:47.95,lon:-97.18},
-        {id:"KJMS",name:"Jamestown ND",lat:46.93,lon:-98.68},
-        {id:"KFSD",name:"Sioux Falls",lat:43.58,lon:-96.74},
-        {id:"KRAP",name:"Rapid City",lat:44.05,lon:-103.06},
-        {id:"KPIR",name:"Pierre",lat:44.38,lon:-100.29},
-        {id:"KABR",name:"Aberdeen SD",lat:45.45,lon:-98.42},
-        // Iowa / Nebraska
-        {id:"KDSM",name:"Des Moines",lat:41.53,lon:-93.66},
-        {id:"KCID",name:"Cedar Rapids",lat:41.88,lon:-91.71},
-        {id:"KDBQ",name:"Dubuque",lat:42.40,lon:-90.70},
-        {id:"KALO",name:"Waterloo",lat:42.56,lon:-92.40},
-        {id:"KSUX",name:"Sioux City",lat:42.40,lon:-96.38},
-        {id:"KOMA",name:"Omaha",lat:41.30,lon:-95.89},
-        {id:"KLNK",name:"Lincoln",lat:40.85,lon:-96.76},
-        {id:"KGRI",name:"Grand Island",lat:40.97,lon:-98.31},
-        {id:"KLBF",name:"North Platte",lat:41.13,lon:-100.68},
-        {id:"KBFF",name:"Scottsbluff",lat:41.87,lon:-103.60},
-        // Kansas / Oklahoma / Missouri
-        {id:"KICT",name:"Wichita",lat:37.65,lon:-97.43},
-        {id:"KTOP",name:"Topeka",lat:39.07,lon:-95.62},
-        {id:"KGCK",name:"Garden City",lat:37.93,lon:-100.72},
-        {id:"KHYS",name:"Hays",lat:38.84,lon:-99.27},
-        {id:"KOKC",name:"Oklahoma City",lat:35.39,lon:-97.60},
-        {id:"KTUL",name:"Tulsa",lat:36.20,lon:-95.89},
-        {id:"KWTO",name:"Stillwater",lat:36.16,lon:-97.09},
-        {id:"KLTS",name:"Altus AFB",lat:34.67,lon:-99.27},
-        {id:"KSTL",name:"St. Louis",lat:38.75,lon:-90.37},
-        {id:"KMCI",name:"Kansas City",lat:39.30,lon:-94.71},
-        {id:"KSGF",name:"Springfield MO",lat:37.24,lon:-93.39},
-        {id:"KCOU",name:"Columbia MO",lat:38.82,lon:-92.22},
-        // Existing core (Midwest / East / Gulf)
         {id:"KCMH",name:"Columbus John Glenn",lat:39.99,lon:-82.88},
-        {id:"KOSU",name:"Ohio State",lat:40.08,lon:-83.07},
-        {id:"KLCK",name:"Rickenbacker",lat:39.81,lon:-82.93},
-        {id:"KTZR",name:"Bolton Field",lat:39.90,lon:-83.14},
         {id:"KDAY",name:"Dayton",lat:39.90,lon:-84.22},
         {id:"KCLE",name:"Cleveland",lat:41.41,lon:-81.85},
         {id:"KCVG",name:"Cincinnati CVG",lat:39.05,lon:-84.67},
         {id:"KIND",name:"Indianapolis",lat:39.72,lon:-86.29},
+        {id:"KFWA",name:"Fort Wayne",lat:40.98,lon:-85.20},
         {id:"KDTW",name:"Detroit Metro",lat:42.21,lon:-83.35},
         {id:"KORD",name:"Chicago O'Hare",lat:41.98,lon:-87.90},
         {id:"KMDW",name:"Chicago Midway",lat:41.79,lon:-87.75},
         {id:"KMKE",name:"Milwaukee",lat:42.95,lon:-87.90},
-        {id:"KJFK",name:"New York JFK",lat:40.64,lon:-73.78},
-        {id:"KLGA",name:"LaGuardia",lat:40.78,lon:-73.87},
-        {id:"KEWR",name:"Newark",lat:40.69,lon:-74.17},
-        {id:"KBOS",name:"Boston",lat:42.36,lon:-71.01},
+        {id:"KMSP",name:"Minneapolis",lat:44.88,lon:-93.22},
+        {id:"KSTL",name:"St. Louis",lat:38.75,lon:-90.37},
+        {id:"KMCI",name:"Kansas City",lat:39.30,lon:-94.71},
         {id:"KPHL",name:"Philadelphia",lat:39.87,lon:-75.24},
         {id:"KPIT",name:"Pittsburgh",lat:40.49,lon:-80.23},
+        {id:"KBWI",name:"Baltimore",lat:39.18,lon:-76.67},
         {id:"KDCA",name:"Washington Reagan",lat:38.85,lon:-77.04},
         {id:"KIAD",name:"Dulles",lat:38.95,lon:-77.46},
-        {id:"KBWI",name:"Baltimore",lat:39.18,lon:-76.67},
+        {id:"KRIC",name:"Richmond",lat:37.51,lon:-77.32},
         {id:"KCLT",name:"Charlotte",lat:35.21,lon:-80.94},
         {id:"KRDU",name:"Raleigh",lat:35.88,lon:-78.79},
         {id:"KATL",name:"Atlanta",lat:33.64,lon:-84.43},
         {id:"KBNA",name:"Nashville",lat:36.12,lon:-86.68},
         {id:"KMEM",name:"Memphis",lat:35.04,lon:-89.98},
         {id:"KSDF",name:"Louisville",lat:38.17,lon:-85.74},
-        {id:"KMSY",name:"New Orleans",lat:29.99,lon:-90.26},
-        {id:"KMIA",name:"Miami",lat:25.80,lon:-80.29},
-        {id:"KMCO",name:"Orlando",lat:28.43,lon:-81.31},
-        {id:"KTPA",name:"Tampa",lat:27.98,lon:-82.53},
-        {id:"KJAX",name:"Jacksonville",lat:30.49,lon:-81.69},
+        {id:"KJFK",name:"New York JFK",lat:40.64,lon:-73.78},
+        {id:"KLGA",name:"LaGuardia",lat:40.78,lon:-73.87},
+        {id:"KEWR",name:"Newark",lat:40.69,lon:-74.17},
+        {id:"KBOS",name:"Boston",lat:42.36,lon:-71.01},
+        {id:"KBUF",name:"Buffalo",lat:42.94,lon:-78.73},
         {id:"KIAH",name:"Houston",lat:29.98,lon:-95.34},
+        {id:"KHOU",name:"Houston Hobby",lat:29.65,lon:-95.28},
         {id:"KDFW",name:"Dallas-Fort Worth",lat:32.90,lon:-97.04},
         {id:"KAUS",name:"Austin",lat:30.19,lon:-97.67},
         {id:"KSAT",name:"San Antonio",lat:29.53,lon:-98.47},
+        {id:"KOKC",name:"Oklahoma City",lat:35.39,lon:-97.60},
+        {id:"KTUL",name:"Tulsa",lat:36.20,lon:-95.89},
+        {id:"KLIT",name:"Little Rock",lat:34.73,lon:-92.22},
+        {id:"KMSY",name:"New Orleans",lat:29.99,lon:-90.26},
+        {id:"KBHM",name:"Birmingham",lat:33.56,lon:-86.75},
+        {id:"KMIA",name:"Miami",lat:25.80,lon:-80.29},
+        {id:"KMCO",name:"Orlando",lat:28.43,lon:-81.31},
+        {id:"KTPA",name:"Tampa",lat:27.98,lon:-82.53},
         {id:"KDEN",name:"Denver",lat:39.86,lon:-104.67},
         {id:"KPHX",name:"Phoenix",lat:33.43,lon:-112.01},
         {id:"KLAS",name:"Las Vegas",lat:36.08,lon:-115.15},
@@ -332,31 +307,13 @@
         {id:"KSFO",name:"San Francisco",lat:37.62,lon:-122.38}
     ];
 
-    const WORLD_STATIONS = [
-        {name:"London",lat:51.47,lon:-0.46},{name:"Paris",lat:49.01,lon:2.55},
-        {name:"Amsterdam",lat:52.31,lon:4.77},{name:"Frankfurt",lat:50.04,lon:8.56},
-        {name:"Munich",lat:48.35,lon:11.79},{name:"Berlin",lat:52.56,lon:13.29},
-        {name:"Madrid",lat:40.47,lon:-3.57},{name:"Barcelona",lat:41.30,lon:2.08},
-        {name:"Rome",lat:41.80,lon:12.25},{name:"Milan",lat:45.63,lon:8.72},
-        {name:"Zurich",lat:47.46,lon:8.55},{name:"Vienna",lat:48.11,lon:16.57},
-        {name:"Warsaw",lat:52.17,lon:20.97},{name:"Stockholm",lat:59.65,lon:17.94},
-        {name:"Dublin",lat:53.43,lon:-6.25},{name:"Lisbon",lat:38.77,lon:-9.13},
-        {name:"Athens",lat:37.94,lon:23.95},{name:"Istanbul",lat:41.26,lon:28.74},
-        {name:"São Paulo",lat:-23.43,lon:-46.47},{name:"Rio de Janeiro",lat:-22.81,lon:-43.25},
-        {name:"Brasília",lat:-15.87,lon:-47.92},{name:"Belo Horizonte",lat:-19.85,lon:-43.95},
-        {name:"Salvador",lat:-12.91,lon:-38.33},{name:"Manaus",lat:-3.04,lon:-60.05},
-        {name:"Curitiba",lat:-25.53,lon:-49.18},{name:"Porto Alegre",lat:-29.99,lon:-51.17}
-    ];
-
     const CITIES = [
         {name:"New York",lat:40.71,lon:-74.01},{name:"Chicago",lat:41.88,lon:-87.63},
         {name:"Houston",lat:29.76,lon:-95.37},{name:"Columbus",lat:39.96,lon:-83.00},
-        {name:"Atlanta",lat:33.75,lon:-84.39},{name:"Miami",lat:25.76,lon:-80.19},
-        {name:"Dallas",lat:32.78,lon:-96.80},{name:"Minneapolis",lat:44.98,lon:-93.27},
-        {name:"Kansas City",lat:39.10,lon:-94.58},{name:"Oklahoma City",lat:35.47,lon:-97.52},
-        {name:"Denver",lat:39.74,lon:-104.99},{name:"London",lat:51.51,lon:-0.13},
-        {name:"Paris",lat:48.86,lon:2.35},{name:"São Paulo",lat:-23.55,lon:-46.63},
-        {name:"Rio de Janeiro",lat:-22.91,lon:-43.17}
+        {name:"Atlanta",lat:33.75,lon:-84.39},{name:"Dallas",lat:32.78,lon:-96.80},
+        {name:"Washington",lat:38.91,lon:-77.04},{name:"Boston",lat:42.36,lon:-71.06},
+        {name:"Detroit",lat:42.33,lon:-83.05},{name:"Philadelphia",lat:39.95,lon:-75.17},
+        {name:"Nashville",lat:36.16,lon:-86.78},{name:"Charlotte",lat:35.23,lon:-80.84}
     ];
 
     let map, cityLayerGroup, tempLayerGroup, alertLayerGroup;
@@ -365,6 +322,7 @@
     let rainviewerHost = "https://tilecache.rainviewer.com";
     let tempFetchTimeout = null;
     let panelMinimized = false;
+    let forecastData = null; // { sites: { KCMH: { "2026-09-10T15:00": 83.5 } } }
 
     function initMap() {
         map = L.map('map', {
@@ -421,10 +379,13 @@
         document.getElementById('playBtn').addEventListener('click', startRadarLoop);
         document.getElementById('pauseBtn').addEventListener('click', stopRadarLoop);
         document.getElementById('refreshBtn').addEventListener('click', () => {
-            fetchTemperaturesForView(); loadRadarFrames(); fetchAlerts(); loadSatellite();
+            loadForecastFile().then(fetchTemperaturesForView);
+            loadRadarFrames(); fetchAlerts(); loadSatellite();
         });
 
-        fetchTemperaturesForView();
+        loadForecastFile().then(() => {
+            fetchTemperaturesForView();
+        });
         loadRadarFrames();
         fetchAlerts();
         loadSatellite();
@@ -432,6 +393,7 @@
         setInterval(fetchTemperaturesForView, CONFIG.tempRefreshMs);
         setInterval(loadRadarFrames, CONFIG.radarRefreshMs);
         setInterval(fetchAlerts, CONFIG.alertRefreshMs);
+        setInterval(loadForecastFile, 30 * 60 * 1000);
     }
 
     function togglePanel() {
@@ -459,6 +421,44 @@
         });
     }
 
+    async function loadForecastFile() {
+        try {
+            const resp = await fetch(CONFIG.forecastUrl + '?t=' + Date.now());
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            forecastData = await resp.json();
+            const n = forecastData.sites ? Object.keys(forecastData.sites).length : 0;
+            document.getElementById('forecastStatus').textContent = n + ' sites';
+        } catch (e) {
+            forecastData = null;
+            document.getElementById('forecastStatus').textContent = 'Missing';
+        }
+    }
+
+    function getForecastTemp(siteId) {
+        if (!forecastData || !forecastData.sites || !forecastData.sites[siteId]) return null;
+        const now = new Date();
+        // Use local hour key matching converter: YYYY-MM-DDTHH:00
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const h = String(now.getHours()).padStart(2, '0');
+        const key = `${y}-${m}-${d}T${h}:00`;
+        const site = forecastData.sites[siteId];
+        if (site[key] != null) return site[key];
+        // fallback nearest hour keys same day
+        const prefix = `${y}-${m}-${d}T`;
+        const hours = Object.keys(site).filter(k => k.startsWith(prefix)).sort();
+        if (!hours.length) return null;
+        // pick closest hour
+        let best = null, bestDiff = 99;
+        hours.forEach(k => {
+            const hh = parseInt(k.slice(11, 13), 10);
+            const diff = Math.abs(hh - now.getHours());
+            if (diff < bestDiff) { bestDiff = diff; best = site[k]; }
+        });
+        return best;
+    }
+
     function windText(deg, speedKt) {
         if (speedKt == null || isNaN(speedKt)) return '—';
         if (speedKt < 0.5) return 'Calm';
@@ -469,16 +469,14 @@
         return `${dir}${Math.round(speedKt)} kt (${mph} mph)`;
     }
 
-    // Convert NWS quantitative value to knots using unitCode when available.
     function nwsValueToKt(prop) {
         if (!prop || prop.value == null || isNaN(prop.value)) return null;
         const unit = (prop.unitCode || '').toLowerCase();
         const v = Number(prop.value);
-        if (unit.includes('m_s-1') || unit.includes('m/s')) return v * 1.94384;       // m/s -> kt
-        if (unit.includes('km_h-1') || unit.includes('km/h')) return v * 0.539957;    // km/h -> kt
-        if (unit.includes('kt') || unit.includes('knot')) return v;                    // already kt
-        if (unit.includes('mi_h-1') || unit.includes('mph')) return v * 0.868976;     // mph -> kt
-        // Default NWS observation windSpeed is m/s
+        if (unit.includes('m_s-1') || unit.includes('m/s')) return v * 1.94384;
+        if (unit.includes('km_h-1') || unit.includes('km/h')) return v * 0.539957;
+        if (unit.includes('kt') || unit.includes('knot')) return v;
+        if (unit.includes('mi_h-1') || unit.includes('mph')) return v * 0.868976;
         return v * 1.94384;
     }
 
@@ -495,6 +493,12 @@
         const wx = p.textDescription || '';
         let html = `<div class="obs-popup"><h3>${r.station.name}</h3>
             <div class="row"><span class="label">Temperature</span><span class="value">${r.tempF}°F (${r.tempC}°C)</span></div>`;
+        if (r.forecastF != null) {
+            const diff = r.tempF - Math.round(r.forecastF);
+            const sign = diff > 0 ? '+' : '';
+            html += `<div class="row"><span class="label">WSI forecast (hour)</span><span class="value">${Math.round(r.forecastF)}°F</span></div>`;
+            html += `<div class="row"><span class="label">Difference</span><span class="value">${sign}${diff}°</span></div>`;
+        }
         if (dewF != null) html += `<div class="row"><span class="label">Dew Point</span><span class="value">${dewF}°F (${dewC}°C)</span></div>`;
         if (rh != null) html += `<div class="row"><span class="label">Humidity</span><span class="value">${rh}%</span></div>`;
         html += `<div class="row"><span class="label">Wind</span><span class="value">${windText(windDeg, windKt)}</span></div>`;
@@ -507,41 +511,21 @@
         return html;
     }
 
-    function buildWorldPopup(r) {
-        let html = `<div class="obs-popup"><h3>${r.station.name}</h3>
-            <div class="row"><span class="label">Temperature</span><span class="value">${r.tempF}°F (${r.tempC}°C)</span></div>`;
-        if (r.dewF != null) html += `<div class="row"><span class="label">Dew Point</span><span class="value">${r.dewF}°F (${r.dewC}°C)</span></div>`;
-        if (r.rh != null) html += `<div class="row"><span class="label">Humidity</span><span class="value">${r.rh}%</span></div>`;
-        if (r.windDir != null) html += `<div class="row"><span class="label">Wind</span><span class="value">${windText(r.windDir, r.windKt)}</span></div>`;
-        if (r.wx) html += `<div class="wx">${r.wx}</div>`;
-        html += `<div style="margin-top:6px;font-size:11px;color:#64748b;">${r.time || ''}</div></div>`;
-        return html;
-    }
-
-    function weatherCodeText(code) {
-        const map = {0:'Clear',1:'Mainly clear',2:'Partly cloudy',3:'Overcast',45:'Fog',61:'Light rain',63:'Rain',65:'Heavy rain',71:'Light snow',73:'Snow',80:'Showers',95:'Thunderstorm'};
-        return map[code] || '';
-    }
-
     async function fetchTemperaturesForView() {
         if (document.getElementById('tempSelect').value !== 'on') return;
         document.getElementById('tempStatus').textContent = 'Updating...';
         tempLayerGroup.clearLayers();
 
         const bounds = map.getBounds().pad(0.25);
-        let usCandidates = US_STATIONS.filter(s => bounds.contains([s.lat, s.lon]));
-        let worldCandidates = WORLD_STATIONS.filter(s => bounds.contains([s.lat, s.lon]));
-
-        if (usCandidates.length + worldCandidates.length > CONFIG.maxTempsToFetch) {
+        let candidates = US_STATIONS.filter(s => bounds.contains([s.lat, s.lon]));
+        if (candidates.length > CONFIG.maxTempsToFetch) {
             const center = map.getCenter();
-            usCandidates.sort((a,b) => Math.hypot(a.lat-center.lat,a.lon-center.lng) - Math.hypot(b.lat-center.lat,b.lon-center.lng));
-            worldCandidates.sort((a,b) => Math.hypot(a.lat-center.lat,a.lon-center.lng) - Math.hypot(b.lat-center.lat,b.lon-center.lng));
-            usCandidates = usCandidates.slice(0, 80);
-            worldCandidates = worldCandidates.slice(0, 30);
+            candidates.sort((a,b) => Math.hypot(a.lat-center.lat,a.lon-center.lng) - Math.hypot(b.lat-center.lat,b.lon-center.lng));
+            candidates = candidates.slice(0, CONFIG.maxTempsToFetch);
         }
 
         let success = 0;
-        const usPromises = usCandidates.map(async (station) => {
+        const promises = candidates.map(async (station) => {
             try {
                 const resp = await fetch(`https://api.weather.gov/stations/${station.id}/observations/latest`, {
                     headers: { 'User-Agent': CONFIG.userAgent, 'Accept': 'application/geo+json' }
@@ -551,32 +535,13 @@
                 const props = data.properties;
                 if (!props || props.temperature?.value == null) return null;
                 const tempC = props.temperature.value;
-                return { type:'us', station, tempF: Math.round(tempC*9/5+32), tempC: Math.round(tempC), timestamp: props.timestamp, props };
+                const tempF = Math.round(tempC * 9/5 + 32);
+                const forecastF = getForecastTemp(station.id);
+                return { station, tempF, tempC: Math.round(tempC), timestamp: props.timestamp, props, forecastF };
             } catch(e) { return null; }
         });
 
-        const worldPromises = worldCandidates.map(async (station) => {
-            try {
-                const url = `https://api.open-meteo.com/v1/forecast?latitude=${station.lat}&longitude=${station.lon}&current=temperature_2m,relative_humidity_2m,dew_point_2m,weather_code,wind_speed_10m,wind_direction_10m&wind_speed_unit=kn&timezone=auto`;
-                const resp = await fetch(url);
-                if (!resp.ok) return null;
-                const data = await resp.json();
-                const c = data.current;
-                if (!c || c.temperature_2m == null) return null;
-                const tempC = c.temperature_2m;
-                const dewC = c.dew_point_2m != null ? Math.round(c.dew_point_2m) : null;
-                return {
-                    type:'world', station,
-                    tempF: Math.round(tempC*9/5+32), tempC: Math.round(tempC),
-                    dewF: dewC != null ? Math.round(dewC*9/5+32) : null, dewC,
-                    rh: c.relative_humidity_2m != null ? Math.round(c.relative_humidity_2m) : null,
-                    windDir: c.wind_direction_10m, windKt: c.wind_speed_10m,
-                    wx: weatherCodeText(c.weather_code), time: c.time
-                };
-            } catch(e) { return null; }
-        });
-
-        const results = await Promise.all([...usPromises, ...worldPromises]);
+        const results = await Promise.all(promises);
         results.forEach(r => {
             if (!r) return;
             success++;
@@ -585,9 +550,24 @@
             else if (r.tempF >= 70) cls += ' warm';
             else if (r.tempF >= 40) cls += ' cool';
             else cls += ' cold';
-            const icon = L.divIcon({ className: cls, html: r.tempF + '°', iconSize: [34,34], iconAnchor: [17,17] });
-            const popupHtml = r.type === 'us' ? buildUSPopup(r) : buildWorldPopup(r);
-            L.marker([r.station.lat, r.station.lon], {icon}).bindPopup(popupHtml, {maxWidth:280}).addTo(tempLayerGroup);
+
+            let diffHtml = '';
+            if (r.forecastF != null) {
+                const diff = r.tempF - Math.round(r.forecastF);
+                const sign = diff > 0 ? '+' : '';
+                const dcls = diff > 0 ? 'pos' : (diff < 0 ? 'neg' : 'zero');
+                diffHtml = `<div class="diff ${dcls}">${sign}${diff}</div>`;
+            }
+
+            const icon = L.divIcon({
+                className: cls,
+                html: `<div>${r.tempF}°</div>${diffHtml}`,
+                iconSize: [44, 40],
+                iconAnchor: [22, 20]
+            });
+            L.marker([r.station.lat, r.station.lon], {icon})
+                .bindPopup(buildUSPopup(r), {maxWidth: 280})
+                .addTo(tempLayerGroup);
         });
 
         document.getElementById('tempStatus').textContent = success + ' in view';
@@ -618,7 +598,6 @@
     }
 
     function ensureRadarLayers() {
-        // Create two reusable layers once; swap opacity/visibility instead of destroy/recreate
         if (!radarLayerA) {
             radarLayerA = L.tileLayer('', { opacity: 0, zIndex: 200, maxNativeZoom: 7, maxZoom: 12 });
             radarLayerB = L.tileLayer('', { opacity: 0, zIndex: 201, maxNativeZoom: 7, maxZoom: 12 });
@@ -627,37 +606,21 @@
         }
     }
 
-    function preloadRadarTiles(index) {
-        if (!radarFrames.length) return;
-        const frame = radarFrames[((index % radarFrames.length) + radarFrames.length) % radarFrames.length];
-        // Hint browser to fetch a center tile; full viewport tiles still load via Leaflet
-        const img = new Image();
-        img.src = rainviewerHost + frame.path + '/256/5/8/12/2/1_1.png';
-    }
-
     function showRadarFrame(index) {
         if (!radarFrames.length) return;
         index = Math.max(0, Math.min(index, radarFrames.length - 1));
         currentFrameIndex = index;
         const frame = radarFrames[index];
         ensureRadarLayers();
-
         const nextLayer = activeRadar === 'A' ? radarLayerB : radarLayerA;
         const currLayer = activeRadar === 'A' ? radarLayerA : radarLayerB;
-
         nextLayer.setUrl(radarUrl(frame));
-        // Mild crossfade
         nextLayer.setOpacity(0);
         setTimeout(() => {
             nextLayer.setOpacity(CONFIG.radarOpacity);
             currLayer.setOpacity(0);
         }, 40);
         activeRadar = activeRadar === 'A' ? 'B' : 'A';
-
-        // Preload a couple frames ahead
-        preloadRadarTiles(index + 1);
-        preloadRadarTiles(index + 2);
-
         const t = new Date(frame.time * 1000).toLocaleTimeString();
         document.getElementById('radarTimeLabel').textContent = t;
         document.getElementById('radarStatus').textContent = (index+1) + '/' + radarFrames.length;
@@ -684,10 +647,7 @@
 
     function stopRadarLoop() {
         radarPlaying = false;
-        if (radarTimer) {
-            clearTimeout(radarTimer);
-            clearInterval(radarTimer);
-        }
+        if (radarTimer) { clearTimeout(radarTimer); clearInterval(radarTimer); }
         radarTimer = null;
         document.getElementById('playBtn').style.opacity = '1';
     }
@@ -695,22 +655,18 @@
     function loadSatellite() {
         const choice = document.getElementById('satSelect').value;
         if (satLayer) { map.removeLayer(satLayer); satLayer = null; }
-
         if (choice === 'none') {
             document.getElementById('satStatus').textContent = 'Off';
             document.getElementById('satTimeLabel').textContent = '—';
             return;
         }
-
         if (choice === 'global_infrared') {
-            // Best-effort global IR from RainViewer
             fetch('https://api.rainviewer.com/public/weather-maps.json')
                 .then(r => r.json())
                 .then(api => {
                     const frames = api.satellite?.infrared || [];
                     if (!frames.length) {
                         document.getElementById('satStatus').textContent = 'Unavailable';
-                        document.getElementById('satTimeLabel').textContent = 'No data';
                         return;
                     }
                     const frame = frames[frames.length - 1];
@@ -718,18 +674,12 @@
                     satLayer = L.tileLayer(host + frame.path + '/256/{z}/{x}/{y}/0/0_0.png', {
                         opacity: CONFIG.satelliteOpacity, zIndex: 100, maxNativeZoom: 7, maxZoom: 10
                     }).addTo(map);
-                    const t = frame.time ? new Date(frame.time * 1000).toLocaleTimeString() : 'Latest';
-                    document.getElementById('satTimeLabel').textContent = t;
+                    document.getElementById('satTimeLabel').textContent = frame.time ? new Date(frame.time * 1000).toLocaleTimeString() : 'Latest';
                     document.getElementById('satStatus').textContent = 'Global IR';
                 })
-                .catch(() => {
-                    document.getElementById('satStatus').textContent = 'Error';
-                    document.getElementById('satTimeLabel').textContent = 'Error';
-                });
+                .catch(() => { document.getElementById('satStatus').textContent = 'Error'; });
             return;
         }
-
-        // GOES-East single reliable frame
         const channelMap = {
             goes_visible: 'conus_ch02',
             goes_shortwave: 'conus_ch07',
@@ -738,12 +688,10 @@
         };
         const layer = channelMap[choice];
         if (!layer) return;
-
         satLayer = L.tileLayer.wms('https://mesonet.agron.iastate.edu/cgi-bin/wms/goes_east.cgi?', {
             layers: layer, format: 'image/png', transparent: true,
             opacity: CONFIG.satelliteOpacity, attribution: 'GOES-East © Iowa State / NOAA', zIndex: 100
         }).addTo(map);
-
         document.getElementById('satTimeLabel').textContent = 'GOES latest';
         document.getElementById('satStatus').textContent = 'US GOES';
     }
@@ -763,7 +711,6 @@
                 const e = (f.properties.event || '').toLowerCase();
                 return e.includes('warning') || e.includes('watch') || e.includes('tornado') || e.includes('severe') || e.includes('hurricane');
             }).slice(0, 40);
-
             let shown = 0;
             important.forEach(f => {
                 try {
@@ -777,7 +724,6 @@
                     shown++;
                 } catch(e) {}
             });
-
             const box = document.getElementById('alertBox');
             if (important.length > 0) {
                 box.style.display = 'block';
@@ -786,7 +732,6 @@
                         `<div class="alert-item">${f.properties.event}<br><small>${(f.properties.areaDesc||'').substring(0,50)}...</small></div>`
                     ).join('');
             } else box.style.display = 'none';
-
             document.getElementById('alertStatus').textContent = shown + ' shown';
         } catch(e) {
             document.getElementById('alertStatus').textContent = 'Error';
