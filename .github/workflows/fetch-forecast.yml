@@ -25,7 +25,7 @@ jobs:
           WSI_ACCOUNT: ${{ secrets.WSI_ACCOUNT }}
           WSI_PROFILE: ${{ secrets.WSI_PROFILE }}
           WSI_PASSWORD: ${{ secrets.WSI_PASSWORD }}
-        run: python scripts/fetch_wsi_forecast.py
+        run: python scripts/scripts/fetch_wsi_forecast.py
 
       - name: Commit forecast data
         run: |
