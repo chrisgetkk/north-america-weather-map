@@ -7,7 +7,6 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Start with key Midwest / East / PJM / TX sites (can expand later)
 SITE_IDS = [
     "KCMH", "KDAY", "KCLE", "KCVG", "KIND", "KFWA",
     "KDTW", "KORD", "KMDW", "KMKE", "KMSP", "KSTL", "KMCI",
@@ -40,24 +39,55 @@ req = urllib.request.Request(url, headers={"User-Agent": "WeatherMapForecastBot/
 with urllib.request.urlopen(req, timeout=120) as resp:
     raw = resp.read().decode("utf-8", errors="replace")
 
-# Parse CSV -> { site_id: { "YYYY-MM-DDTHH:00": temp_f, ... }, ... }
+Path("data").mkdir(parents=True, exist_ok=True)
+# Keep a short sample so we can debug if parsing fails
+Path("data/forecast-raw-sample.txt").write_text(raw[:2000])
+print("Response length:", len(raw))
+print("Response starts with:", raw[:200].replace("\n", " | "))
+
 out = {}
 reader = csv.DictReader(io.StringIO(raw))
+fieldnames = reader.fieldnames or []
+print("CSV headers:", fieldnames)
+
 for row in reader:
-    site = (row.get("Site ID") or row.get("SiteId") or "").strip()
-    date = (row.get("Valid Date") or "").strip()
-    hour = (row.get("Valid Hour") or "").strip()
-    temp = row.get("Temp F") or row.get("TempF")
+    # try several possible header names
+    site = (
+        row.get("Site ID")
+        or row.get("SiteId")
+        or row.get("Site")
+        or row.get("Location")
+        or ""
+    ).strip()
+    date = (row.get("Valid Date") or row.get("Date") or "").strip()
+    hour = (row.get("Valid Hour") or row.get("Hour") or "").strip()
+    temp = row.get("Temp F") or row.get("TempF") or row.get("Temp")
+
     if not site or not date or not hour or temp in (None, ""):
         continue
+
+    # If site is a city name, map a few common ones to IDs
+    if site.upper() not in [s.upper() for s in SITE_IDS]:
+        name_map = {
+            "COLUMBUS": "KCMH",
+            "CHICAGO": "KORD",
+            "INDIANAPOLIS": "KIND",
+            "DETROIT": "KDTW",
+            "PITTSBURGH": "KPIT",
+            "PHILADELPHIA": "KPHL",
+            "ATLANTA": "KATL",
+            "HOUSTON": "KIAH",
+            "DALLAS": "KDFW",
+        }
+        site = name_map.get(site.upper(), site)
+
     try:
         temp_f = round(float(temp), 1)
     except ValueError:
         continue
 
-    # Normalize hour like "03:00 PM" / "3:00 PM" / "15:00"
     key_time = None
-    for fmt in ("%I:%M %p", "%H:%M", "%H:%M:%S"):
+    for fmt in ("%I:%M %p", "%I:%M%p", "%H:%M", "%H:%M:%S"):
         try:
             t = datetime.strptime(hour.strip(), fmt)
             key_time = f"{t.hour:02d}:00"
@@ -67,12 +97,15 @@ for row in reader:
     if not key_time:
         continue
 
-    # Date like 09/08/2026
     try:
         d = datetime.strptime(date, "%m/%d/%Y")
         day = d.strftime("%Y-%m-%d")
     except ValueError:
-        continue
+        try:
+            d = datetime.strptime(date, "%Y-%m-%d")
+            day = d.strftime("%Y-%m-%d")
+        except ValueError:
+            continue
 
     out.setdefault(site, {})[f"{day}T{key_time}"] = temp_f
 
@@ -81,8 +114,7 @@ payload = {
     "source": "WSI Trader Hourly Forecast",
     "sites": out,
 }
-
-Path("data").mkdir(parents=True, exist_ok=True)
-path = Path("data/forecast-hourly.json")
-path.write_text(json.dumps(payload, indent=2))
-print("Wrote", path, "with", len(out), "sites")
+Path("data/forecast-hourly.json").write_text(json.dumps(payload, indent=2))
+print("Wrote data/forecast-hourly.json with", len(out), "sites")
+if not out:
+    print("WARNING: no rows parsed. Check data/forecast-raw-sample.txt")
