@@ -64,4 +64,42 @@ for part in parts[1:]:
     reader = csv.DictReader(io.StringIO(table))
     for row in reader:
         clean = {}
-        for k, v in
+        for k, v in row.items():
+            key = (k or "").strip()
+            val = (v or "").strip()
+            clean[key] = val
+
+        local = clean.get("LocalTime", "")
+        temp = clean.get("Temp", "")
+        if not local or not temp:
+            continue
+
+        try:
+            temp_f = round(float(temp), 1)
+        except ValueError:
+            continue
+
+        dt = None
+        for fmt in ("%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %I:%M %p"):
+            try:
+                dt = datetime.strptime(local, fmt)
+                break
+            except ValueError:
+                pass
+        if dt is None:
+            continue
+
+        key = dt.strftime("%Y-%m-%d") + "T" + f"{dt.hour:02d}:00"
+        if site not in out:
+            out[site] = {}
+        out[site][key] = temp_f
+
+payload = {
+    "updated_at": datetime.now(timezone.utc).isoformat(),
+    "source": "WSI Trader Hourly Forecast",
+    "sites": out,
+}
+Path("data/forecast-hourly.json").write_text(json.dumps(payload, indent=2))
+print("Wrote sites:", len(out))
+for s, hours in list(out.items())[:5]:
+    print(s, "->", len(hours), "hours")
