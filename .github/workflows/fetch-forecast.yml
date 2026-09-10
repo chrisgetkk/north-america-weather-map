@@ -1,0 +1,37 @@
+name: Fetch WSI Hourly Forecast
+
+on:
+  schedule:
+    # 7:00 AM Eastern during EDT (UTC-4) = 11:00 UTC
+    - cron: "0 11 * * *"
+  workflow_dispatch: # allows manual "Run workflow" button
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Fetch and convert forecast
+        env:
+          WSI_ACCOUNT: ${{ secrets.WSI_ACCOUNT }}
+          WSI_PROFILE: ${{ secrets.WSI_PROFILE }}
+          WSI_PASSWORD: ${{ secrets.WSI_PASSWORD }}
+        run: python scripts/fetch_wsi_forecast.py
+
+      - name: Commit forecast data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p data
+          git add data/forecast-hourly.json || true
+          git diff --staged --quiet || git commit -m "Update hourly forecast $(date -u +%Y-%m-%d)"
+          git push
