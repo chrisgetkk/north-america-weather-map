@@ -44,12 +44,10 @@ Path("data/forecast-raw-sample.txt").write_text(raw[:3000])
 print("Response length:", len(raw))
 
 out = {}
-
-# Split into station blocks starting with NA-KXXX
 parts = raw.split("NA-")
 for part in parts[1:]:
     first_line, _, rest = part.partition("\n")
-    site = first_line.split()[0].split(",")[0].strip()  # KCMH
+    site = first_line.split()[0].split(",")[0].strip()
     if not site:
         continue
 
@@ -59,4 +57,11 @@ for part in parts[1:]:
         if "LocalTime" in line and "Temp" in line:
             header_idx = i
             break
-    if
+    if header_idx is None:
+        continue
+
+    table = "\n".join(lines[header_idx:])
+    reader = csv.DictReader(io.StringIO(table))
+    for row in reader:
+        clean = {}
+        for k, v in
