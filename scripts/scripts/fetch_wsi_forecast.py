@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import os
+import re
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -36,78 +37,67 @@ url = "https://www.wsitrader.com/Services/CSVDownloadService.svc/GetHourlyForeca
 
 print("Requesting forecast for", len(SITE_IDS), "sites...")
 req = urllib.request.Request(url, headers={"User-Agent": "WeatherMapForecastBot/1.0"})
-with urllib.request.urlopen(req, timeout=120) as resp:
+with urllib.request.urlopen(req, timeout=180) as resp:
     raw = resp.read().decode("utf-8", errors="replace")
 
 Path("data").mkdir(parents=True, exist_ok=True)
-# Keep a short sample so we can debug if parsing fails
-Path("data/forecast-raw-sample.txt").write_text(raw[:2000])
+Path("data/forecast-raw-sample.txt").write_text(raw[:3000])
 print("Response length:", len(raw))
-print("Response starts with:", raw[:200].replace("\n", " | "))
+print("Response starts with:", raw[:180].replace("\n", " | "))
 
 out = {}
-reader = csv.DictReader(io.StringIO(raw))
-fieldnames = reader.fieldnames or []
-print("CSV headers:", fieldnames)
 
-for row in reader:
-    # try several possible header names
-    site = (
-        row.get("Site ID")
-        or row.get("SiteId")
-        or row.get("Site")
-        or row.get("Location")
-        or ""
-    ).strip()
-    date = (row.get("Valid Date") or row.get("Date") or "").strip()
-    hour = (row.get("Valid Hour") or row.get("Hour") or "").strip()
-    temp = row.get("Temp F") or row.get("TempF") or row.get("Temp")
-
-    if not site or not date or not hour or temp in (None, ""):
+# WSI returns one or more blocks like:
+# NA-KCMH , Hourly Forecast Made ...
+# LocalTime, Temp, ...
+# 9/10/2026 3:00:00 PM,77.36,...
+blocks = re.split(r"(?=NA-[A-Z0-9]+)", raw)
+for block in blocks:
+    block = block.strip()
+    if not block.startswith("NA-"):
         continue
 
-    # If site is a city name, map a few common ones to IDs
-    if site.upper() not in [s.upper() for s in SITE_IDS]:
-        name_map = {
-            "COLUMBUS": "KCMH",
-            "CHICAGO": "KORD",
-            "INDIANAPOLIS": "KIND",
-            "DETROIT": "KDTW",
-            "PITTSBURGH": "KPIT",
-            "PHILADELPHIA": "KPHL",
-            "ATLANTA": "KATL",
-            "HOUSTON": "KIAH",
-            "DALLAS": "KDFW",
-        }
-        site = name_map.get(site.upper(), site)
-
-    try:
-        temp_f = round(float(temp), 1)
-    except ValueError:
+    first_line = block.splitlines()[0]
+    m = re.match(r"NA-([A-Z0-9]+)", first_line.strip())
+    if not m:
         continue
+    site = m.group(1)
 
-    key_time = None
-    for fmt in ("%I:%M %p", "%I:%M%p", "%H:%M", "%H:%M:%S"):
-        try:
-            t = datetime.strptime(hour.strip(), fmt)
-            key_time = f"{t.hour:02d}:00"
+    # Find header line and rows after it
+    lines = block.splitlines()
+    header_idx = None
+    for i, line in enumerate(lines):
+        if "LocalTime" in line and "Temp" in line:
+            header_idx = i
             break
-        except ValueError:
-            pass
-    if not key_time:
+    if header_idx is None:
         continue
 
-    try:
-        d = datetime.strptime(date, "%m/%d/%Y")
-        day = d.strftime("%Y-%m-%d")
-    except ValueError:
+    table = "\n".join(lines[header_idx:])
+    reader = csv.DictReader(io.StringIO(table))
+    for row in reader:
+        local = (row.get("LocalTime") or "").strip()
+        temp = row.get("Temp")
+        if not local or temp in (None, ""):
+            continue
         try:
-            d = datetime.strptime(date, "%Y-%m-%d")
-            day = d.strftime("%Y-%m-%d")
+            temp_f = round(float(temp), 1)
         except ValueError:
             continue
 
-    out.setdefault(site, {})[f"{day}T{key_time}"] = temp_f
+        # Parse "9/10/2026 3:00:00 PM"
+        dt = None
+        for fmt in ("%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %I:%M %p"):
+            try:
+                dt = datetime.strptime(local, fmt)
+                break
+            except ValueError:
+                pass
+        if not dt:
+            continue
+
+        key = f"{dt.strftime('%Y-%m-%d')}T{dt.hour:02d}:00"
+        out.setdefault(site, {})[key] = temp_f
 
 payload = {
     "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -116,5 +106,8 @@ payload = {
 }
 Path("data/forecast-hourly.json").write_text(json.dumps(payload, indent=2))
 print("Wrote data/forecast-hourly.json with", len(out), "sites")
-if not out:
-    print("WARNING: no rows parsed. Check data/forecast-raw-sample.txt")
+if out:
+    sample_site = next(iter(out))
+    print("Sample site", sample_site, "hours:", len(out[sample_site]))
+else:
+    print("WARNING: still no sites parsed")
