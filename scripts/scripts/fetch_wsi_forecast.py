@@ -8,13 +8,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 SITE_IDS = [
-    "KCMH", "KDAY", "KCLE", "KCVG", "KIND", "KFWA",
-    "KDTW", "KORD", "KMDW", "KMKE", "KMSP", "KSTL", "KMCI",
-    "KPHL", "KPIT", "KBWI", "KDCA", "KIAD", "KRIC",
-    "KCLT", "KRDU", "KATL", "KBNA", "KMEM", "KSDF",
-    "KJFK", "KLGA", "KEWR", "KBOS", "KBUF",
-    "KIAH", "KHOU", "KDFW", "KAUS", "KSAT",
-    "KOKC", "KTUL", "KLIT", "KMSY", "KBHM",
+    "KCMH","KOSU","KLCK","KTZR","KDAY","KCLE","KCAK","KYNG","KTOL","KCVG","KLUK",
+    "KIND","KFWA","KSBN","KEVV","KDTW","KDET","KGRR","KLAN","KFNT",
+    "KORD","KMDW","KRFD","KPIA","KCMI","KSPI","KMKE","KMSN","KGRB","KMSP","KRST","KDLH",
+    "KSTL","KMCI","KSGF","KCOU","KDSM","KCID","KDBQ","KSUX","KOMA","KLNK","KICT","KTOP","KOKC","KTUL",
+    "KJFK","KLGA","KEWR","KPHL","KPIT","KBWI","KDCA","KIAD","KRIC","KORF","KROA","KCRW","KHTS",
+    "KBOS","KBDL","KPVD","KBUF","KROC","KSYR","KALB",
+    "KCLT","KRDU","KGSO","KAVL","KCHS","KCAE","KGSP","KATL","KAHN","KSAV",
+    "KBNA","KMEM","KSDF","KLEX","KBHM","KHSV","KMOB","KJAN","KMSY","KBTR",
+    "KMIA","KFLL","KMCO","KTPA","KJAX","KPBI","KTLH",
+    "KIAH","KHOU","KDFW","KDAL","KAUS","KSAT","KELP","KMAF","KLRD","KCRP","KLIT","KXNA",
+    "KDEN","KCOS","KPHX","KTUS","KLAS","KSEA","KPDX","KLAX","KSAN","KSFO","KSJC","KSLC",
 ]
 
 ACCOUNT = os.environ["WSI_ACCOUNT"]
