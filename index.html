@@ -500,17 +500,37 @@
     }
 
     async function loadForecastFile() {
-        try {
-            const resp = await fetch(CONFIG.forecastUrl + '?t=' + Date.now());
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            forecastData = await resp.json();
-            const n = forecastData.sites ? Object.keys(forecastData.sites).length : 0;
-            document.getElementById('forecastStatus').textContent = n + ' sites';
+        // Prefer yesterday's archived day-ahead file; fall back to latest
+        const now = new Date();
+        const y = new Date(now.getTime() - 24*60*60*1000);
+        const ymd = y.getFullYear() + '-' + String(y.getMonth()+1).padStart(2,'0') + '-' + String(y.getDate()).padStart(2,'0');
+        const urls = [
+            'data/archive/forecast-' + ymd + '.json?t=' + Date.now(),
+            CONFIG.forecastUrl + '?t=' + Date.now()
+        ];
+        forecastData = null;
+        let used = '';
+        for (const url of urls) {
+            try {
+                const resp = await fetch(url);
+                if (!resp.ok) continue;
+                const data = await resp.json();
+                if (data && data.sites && Object.keys(data.sites).length) {
+                    forecastData = data;
+                    used = url.indexOf('archive') >= 0 ? ('yesterday ' + ymd) : 'latest';
+                    break;
+                }
+            } catch (e) {}
+        }
+        if (forecastData) {
+            const n = Object.keys(forecastData.sites).length;
+            document.getElementById('forecastStatus').textContent = n + ' sites (' + used + ')';
             const initEl = document.getElementById('forecastInit');
-            if (initEl) initEl.textContent = forecastData.forecast_init || forecastData.updated_at || '—';
-        } catch (e) {
-            forecastData = null;
+            if (initEl) initEl.textContent = forecastData.forecast_init || forecastData.run_date || forecastData.updated_at || '—';
+        } else {
             document.getElementById('forecastStatus').textContent = 'Missing';
+            const initEl = document.getElementById('forecastInit');
+            if (initEl) initEl.textContent = '—';
         }
     }
 
