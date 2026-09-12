@@ -23,12 +23,10 @@ SITE_IDS = [
     "KDEN","KCOS","KPHX","KTUS","KLAS","KSEA","KPDX","KLAX","KSAN","KSFO","KSJC","KSLC",
 ]
 
-BATCH_SIZE = 5  # WSI appears to return ~6 max per call
-
+BATCH_SIZE = 5
 ACCOUNT = os.environ["WSI_ACCOUNT"]
 PROFILE = os.environ["WSI_PROFILE"]
 PASSWORD = os.environ["WSI_PASSWORD"]
-
 header_re = re.compile(r"NA-([A-Z0-9]{3,4})\s*,\s*Hourly Forecast Made\s+(.+)", re.I)
 
 
@@ -97,9 +95,10 @@ def parse_raw(raw, out):
 out = {}
 init_label = None
 Path("data").mkdir(parents=True, exist_ok=True)
+Path("data/archive").mkdir(parents=True, exist_ok=True)
 
 batches = [SITE_IDS[i:i + BATCH_SIZE] for i in range(0, len(SITE_IDS), BATCH_SIZE)]
-print("Total sites:", len(SITE_IDS), "batches:", len(batches), "size", BATCH_SIZE)
+print("Total sites:", len(SITE_IDS), "batches:", len(batches))
 
 for n, batch in enumerate(batches, 1):
     try:
@@ -109,19 +108,25 @@ for n, batch in enumerate(batches, 1):
         label = parse_raw(raw, out)
         if init_label is None and label:
             init_label = label
-        print(f"Batch {n}/{len(batches)}: asked {len(batch)}, total sites now {len(out)}")
+        print(f"Batch {n}/{len(batches)}: total sites now {len(out)}")
         time.sleep(1.0)
     except Exception as e:
         print(f"Batch {n} failed:", e)
         time.sleep(2.0)
 
+now = datetime.now(timezone.utc)
 payload = {
-    "updated_at": datetime.now(timezone.utc).isoformat(),
+    "updated_at": now.isoformat(),
     "forecast_init": init_label,
+    "run_date": now.strftime("%Y-%m-%d"),
     "source": "WSI Trader Hourly Forecast",
     "sites": out,
 }
-Path("data/forecast-hourly.json").write_text(json.dumps(payload, indent=2))
+
+text = json.dumps(payload, indent=2)
+Path("data/forecast-hourly.json").write_text(text)
+# Archive by UTC run date (yesterday's file used next day for day-ahead verify)
+archive_path = Path("data/archive") / f"forecast-{now.strftime('%Y-%m-%d')}.json"
+archive_path.write_text(text)
 print("Wrote sites:", len(out))
-for s, hours in list(out.items())[:10]:
-    print(s, "->", len(hours), "hours")
+print("Archived:", archive_path)
