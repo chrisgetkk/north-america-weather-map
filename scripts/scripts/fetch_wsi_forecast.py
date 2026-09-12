@@ -3,6 +3,7 @@ import io
 import json
 import os
 import re
+import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -22,81 +23,97 @@ SITE_IDS = [
     "KDEN","KCOS","KPHX","KTUS","KLAS","KSEA","KPDX","KLAX","KSAN","KSFO","KSJC","KSLC",
 ]
 
+BATCH_SIZE = 5  # WSI appears to return ~6 max per call
+
 ACCOUNT = os.environ["WSI_ACCOUNT"]
 PROFILE = os.environ["WSI_PROFILE"]
 PASSWORD = os.environ["WSI_PASSWORD"]
 
-params = [
-    ("Account", ACCOUNT),
-    ("Profile", PROFILE),
-    ("Password", PASSWORD),
-    ("region", "NA"),
-    ("TempUnits", "F"),
-    ("timeutc", "false"),
-]
-for site in SITE_IDS:
-    params.append(("SiteIds[]", site))
-
-url = "https://www.wsitrader.com/Services/CSVDownloadService.svc/GetHourlyForecast?" + urllib.parse.urlencode(params)
-print("Requesting", len(SITE_IDS), "sites...")
-
-req = urllib.request.Request(url, headers={"User-Agent": "WeatherMapForecastBot/1.0"})
-with urllib.request.urlopen(req, timeout=300) as resp:
-    raw = resp.read().decode("utf-8", errors="replace")
-
-Path("data").mkdir(parents=True, exist_ok=True)
-Path("data/forecast-raw-sample.txt").write_text(raw[:5000])
-print("Response length:", len(raw))
-
-# Find all station headers like: NA-KCMH , Hourly Forecast Made ...
 header_re = re.compile(r"NA-([A-Z0-9]{3,4})\s*,\s*Hourly Forecast Made\s+(.+)", re.I)
-matches = list(header_re.finditer(raw))
-print("Station headers found:", len(matches))
+
+
+def fetch_batch(sites):
+    params = [
+        ("Account", ACCOUNT),
+        ("Profile", PROFILE),
+        ("Password", PASSWORD),
+        ("region", "NA"),
+        ("TempUnits", "F"),
+        ("timeutc", "false"),
+    ]
+    for site in sites:
+        params.append(("SiteIds[]", site))
+    url = "https://www.wsitrader.com/Services/CSVDownloadService.svc/GetHourlyForecast?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={"User-Agent": "WeatherMapForecastBot/1.0"})
+    with urllib.request.urlopen(req, timeout=180) as resp:
+        return resp.read().decode("utf-8", errors="replace")
+
+
+def parse_raw(raw, out):
+    init_label = None
+    matches = list(header_re.finditer(raw))
+    for i, m in enumerate(matches):
+        site = m.group(1).upper()
+        made = m.group(2).strip()
+        if init_label is None:
+            init_label = made
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(raw)
+        block = raw[start:end]
+        lines = block.splitlines()
+        header_idx = None
+        for j, line in enumerate(lines):
+            if "LocalTime" in line and "Temp" in line:
+                header_idx = j
+                break
+        if header_idx is None:
+            continue
+        table = "\n".join(lines[header_idx:])
+        reader = csv.DictReader(io.StringIO(table))
+        for row in reader:
+            clean = {(k or "").strip(): (v or "").strip() for k, v in row.items()}
+            local = clean.get("LocalTime", "")
+            temp = clean.get("Temp", "")
+            if not local or not temp:
+                continue
+            try:
+                temp_f = round(float(temp), 1)
+            except ValueError:
+                continue
+            dt = None
+            for fmt in ("%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %I:%M %p"):
+                try:
+                    dt = datetime.strptime(local, fmt)
+                    break
+                except ValueError:
+                    pass
+            if dt is None:
+                continue
+            key = dt.strftime("%Y-%m-%d") + "T" + f"{dt.hour:02d}:00"
+            out.setdefault(site, {})[key] = temp_f
+    return init_label
+
 
 out = {}
 init_label = None
+Path("data").mkdir(parents=True, exist_ok=True)
 
-for i, m in enumerate(matches):
-    site = m.group(1).upper()
-    made = m.group(2).strip()
-    if init_label is None:
-        init_label = made
-    start = m.end()
-    end = matches[i + 1].start() if i + 1 < len(matches) else len(raw)
-    block = raw[start:end]
+batches = [SITE_IDS[i:i + BATCH_SIZE] for i in range(0, len(SITE_IDS), BATCH_SIZE)]
+print("Total sites:", len(SITE_IDS), "batches:", len(batches), "size", BATCH_SIZE)
 
-    lines = block.splitlines()
-    header_idx = None
-    for j, line in enumerate(lines):
-        if "LocalTime" in line and "Temp" in line:
-            header_idx = j
-            break
-    if header_idx is None:
-        continue
-
-    table = "\n".join(lines[header_idx:])
-    reader = csv.DictReader(io.StringIO(table))
-    for row in reader:
-        clean = {(k or "").strip(): (v or "").strip() for k, v in row.items()}
-        local = clean.get("LocalTime", "")
-        temp = clean.get("Temp", "")
-        if not local or not temp:
-            continue
-        try:
-            temp_f = round(float(temp), 1)
-        except ValueError:
-            continue
-        dt = None
-        for fmt in ("%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %I:%M %p"):
-            try:
-                dt = datetime.strptime(local, fmt)
-                break
-            except ValueError:
-                pass
-        if dt is None:
-            continue
-        key = dt.strftime("%Y-%m-%d") + "T" + f"{dt.hour:02d}:00"
-        out.setdefault(site, {})[key] = temp_f
+for n, batch in enumerate(batches, 1):
+    try:
+        raw = fetch_batch(batch)
+        if n == 1:
+            Path("data/forecast-raw-sample.txt").write_text(raw[:4000])
+        label = parse_raw(raw, out)
+        if init_label is None and label:
+            init_label = label
+        print(f"Batch {n}/{len(batches)}: asked {len(batch)}, total sites now {len(out)}")
+        time.sleep(1.0)
+    except Exception as e:
+        print(f"Batch {n} failed:", e)
+        time.sleep(2.0)
 
 payload = {
     "updated_at": datetime.now(timezone.utc).isoformat(),
@@ -106,9 +123,5 @@ payload = {
 }
 Path("data/forecast-hourly.json").write_text(json.dumps(payload, indent=2))
 print("Wrote sites:", len(out))
-for s, hours in list(out.items())[:8]:
+for s, hours in list(out.items())[:10]:
     print(s, "->", len(hours), "hours")
-if len(out) < 20:
-    print("WARNING: few sites parsed; sample headers:")
-    for m in matches[:10]:
-        print(" ", m.group(0)[:80])
