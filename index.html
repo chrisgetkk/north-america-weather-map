@@ -424,6 +424,7 @@
     let iemRadarLayers = [];
     let rainviewerHost = "https://tilecache.rainviewer.com";
     let tempChart = null;
+    let rrfsData = null;
     let tempFetchTimeout = null;
     let panelMinimized = false;
     let forecastData = null; // { sites: { KCMH: { "2026-09-10T15:00": 83.5 } } }
@@ -482,11 +483,11 @@
         document.getElementById('playBtn').addEventListener('click', startRadarLoop);
         document.getElementById('pauseBtn').addEventListener('click', stopRadarLoop);
         document.getElementById('refreshBtn').addEventListener('click', () => {
-            loadForecastFile().then(fetchTemperaturesForView);
+            Promise.all([loadForecastFile(), loadRrfsFile()]).then(fetchTemperaturesForView);
             loadRadarFrames(); fetchAlerts(); loadSatellite();
         });
 
-        loadForecastFile().then(() => {
+        Promise.all([loadForecastFile(), loadRrfsFile()]).then(() => {
             fetchTemperaturesForView();
         });
         loadRadarFrames();
@@ -522,6 +523,15 @@
             });
             L.marker([city.lat, city.lon], {icon, interactive:false}).addTo(cityLayerGroup);
         });
+    }
+
+    
+    async function loadRrfsFile() {
+        try {
+            const resp = await fetch('data/rrfs-hourly.json?t=' + Date.now());
+            if (!resp.ok) { rrfsData = null; return; }
+            rrfsData = await resp.json();
+        } catch (e) { rrfsData = null; }
     }
 
     async function loadForecastFile() {
@@ -912,6 +922,14 @@
             return null;
         });
 
+        const rrfsSeries = hourLabels.map((_, h) => {
+            const key = dayPrefix + String(h).padStart(2,'0') + ':00';
+            if (rrfsData && rrfsData.sites && rrfsData.sites[station.id] && rrfsData.sites[station.id][key] != null) {
+                return rrfsData.sites[station.id][key];
+            }
+            return null;
+        });
+
         const ctx = document.getElementById('tempChart').getContext('2d');
         if (tempChart) tempChart.destroy();
         tempChart = new Chart(ctx, {
@@ -937,6 +955,16 @@
                         spanGaps: true,
                         tension: 0.25,
                         pointRadius: 2
+                    },
+                    {
+                        label: 'RRFS model',
+                        data: rrfsSeries,
+                        borderColor: '#22c55e',
+                        backgroundColor: 'transparent',
+                        borderDash: [2,2],
+                        spanGaps: true,
+                        tension: 0.25,
+                        pointRadius: 2
                     }
                 ]
             },
@@ -952,7 +980,8 @@
                 }
             }
         });
-        document.getElementById('graphMeta').textContent = 'Blue = NWS observed · Orange dashed = WSI · ' + (document.getElementById('forecastStatus').textContent || '');
+        const rrfsMeta = (rrfsData && rrfsData.forecast_init) ? (' · RRFS ' + rrfsData.forecast_init) : ' · RRFS n/a';
+        document.getElementById('graphMeta').textContent = 'Blue = observed · Orange = WSI · Green = RRFS' + rrfsMeta;
     }
 
 
