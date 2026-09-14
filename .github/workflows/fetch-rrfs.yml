@@ -1,0 +1,30 @@
+name: Fetch RRFS Model
+
+on:
+  schedule:
+    # ~ every 3 hours
+    - cron: "20 */3 * * *"
+  workflow_dispatch:
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Fetch RRFS
+        env:
+          STORMVISTA_APIKEY: ${{ secrets.STORMVISTA_APIKEY }}
+        run: python scripts/scripts/fetch_rrfs.py
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p data
+          git add data/rrfs-hourly.json data/rrfs-raw-sample.txt || true
+          git diff --staged --quiet || git commit -m "Update RRFS $(date -u +%Y-%m-%dT%H%M)"
+          git push
