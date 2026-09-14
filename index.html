@@ -702,7 +702,7 @@
 
     const IEM_TIMESTAMPS = [
         '900913-m50m','900913-m45m','900913-m40m','900913-m35m','900913-m30m',
-        '900913-m25m','900913-m20m','900913-m15m','900913-m10m','900913-m5m','900913-m0m'
+        '900913-m25m','900913-m20m','900913-m15m','900913-m10m','900913-m05m','900913'
     ];
 
     function clearIemRadar() {
@@ -734,7 +734,8 @@
         index = Math.max(0, Math.min(index, iemRadarLayers.length - 1));
         radarCurrentIndex = index;
         iemRadarLayers.forEach((l, i) => l.setOpacity(i === index ? CONFIG.radarOpacity : 0));
-        const mins = parseInt(IEM_TIMESTAMPS[index].replace('900913-m','').replace('m',''), 10) || 0;
+        const ts = IEM_TIMESTAMPS[index];
+        const mins = ts === '900913' ? 0 : (parseInt(ts.replace('900913-m','').replace('m',''), 10) || 0);
         const t = mins === 0 ? 'Now' : (mins + ' min ago');
         document.getElementById('radarTimeLabel').textContent = t;
         document.getElementById('radarStatus').textContent = (index+1) + '/' + iemRadarLayers.length;
