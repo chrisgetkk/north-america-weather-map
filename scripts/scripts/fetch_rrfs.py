@@ -16,11 +16,11 @@ SITE_IDS = [
     "KDFW","KAUS","KSAT","KOKC","KTUL","KMSY","KMIA","KMCO","KTPA","KDEN",
 ]
 
-# Prefer recent RRFS cycles (every 3h)
+
 def candidate_cycles(now_utc):
     out = []
     base = now_utc.replace(minute=0, second=0, microsecond=0)
-    for hours_back in range(0, 18):
+    for hours_back in range(0, 24):
         t = base - timedelta(hours=hours_back)
         if t.hour % 3 == 0:
             out.append((t.strftime("%Y%m%d"), f"{t.hour:02d}"))
@@ -35,101 +35,111 @@ def fetch_station(station, date, cycle):
         return resp.read().decode("utf-8", errors="replace")
 
 
-def parse_csv(raw):
-    # Expect columns including valid time + tmp2m
+def parse_time_to_key(traw, init_date, init_cycle):
+    if not traw:
+        return None
+    traw = traw.strip()
+    # Try full datetimes
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%m/%d/%Y %H:%M:%S",
+        "%m/%d/%Y %H:%M",
+        "%Y%m%d%H",
+        "%Y%m%d%H%M",
+    ):
+        try:
+            dt = datetime.strptime(traw[:19], fmt) if len(traw) >= 10 else datetime.strptime(traw, fmt)
+            return dt.strftime("%Y-%m-%d") + "T" + f"{dt.hour:02d}:00"
+        except Exception:
+            pass
+    # forecast hour number
+    try:
+        fhr = int(float(traw))
+        init = datetime.strptime(init_date + init_cycle, "%Y%m%d%H")
+        dt = init + timedelta(hours=fhr)
+        return dt.strftime("%Y-%m-%d") + "T" + f"{dt.hour:02d}:00"
+    except Exception:
+        return None
+
+
+def parse_station_csv(raw, station, init_date, init_cycle):
     reader = csv.DictReader(io.StringIO(raw))
-    rows = []
+    fieldnames = [(f or "").strip() for f in (reader.fieldnames or [])]
+    site_map = {}
+    time_keys = [
+        station, station.upper(), station.lower(),
+        "valid_time", "validtime", "time", "fhour", "forecast_hour", "hour", "valid"
+    ]
+    # also first column
+    if fieldnames:
+        time_keys.insert(0, fieldnames[0])
+
     for row in reader:
-        clean = {(k or "").strip().lower(): (v or "").strip() for k, v in row.items()}
-        # try common time keys
-        traw = clean.get("valid_time") or clean.get("validtime") or clean.get("time") or clean.get("fhour")
-        temp = clean.get("tmp2m") or clean.get("temp") or clean.get("t2m")
+        clean = {(k or "").strip(): (v or "").strip() for k, v in row.items()}
+        clean_l = {k.lower(): v for k, v in clean.items()}
+
+        temp = clean_l.get("tmp2m") or clean_l.get("temp")
         if temp in (None, ""):
             continue
         try:
             temp_f = round(float(temp), 1)
         except ValueError:
             continue
-        rows.append((clean, temp_f, traw))
-    return rows, reader.fieldnames
+
+        traw = ""
+        for tk in time_keys:
+            if tk in clean and clean[tk]:
+                traw = clean[tk]
+                break
+            if tk.lower() in clean_l and clean_l[tk.lower()]:
+                traw = clean_l[tk.lower()]
+                break
+
+        key = parse_time_to_key(traw, init_date, init_cycle)
+        if key:
+            site_map[key] = temp_f
+    return site_map, fieldnames
 
 
 out = {}
-meta = {"model": "rrfs", "cycle": None, "date": None}
 Path("data").mkdir(parents=True, exist_ok=True)
-
 now = datetime.now(timezone.utc)
 cycles = candidate_cycles(now)
-print("Trying cycles:", cycles[:6])
+print("Trying cycles:", cycles[:8])
 
 chosen = None
 sample_raw = None
 for date, cycle in cycles:
     try:
         raw = fetch_station("KCMH", date, cycle)
-        if "tmp2m" in raw.lower() or "Temp" in raw or len(raw) > 100:
+        if "tmp2m" in raw.lower() and len(raw) > 50:
             chosen = (date, cycle)
             sample_raw = raw
             print("Using cycle", date, cycle, "len", len(raw))
+            print("HEAD:", raw[:250].replace("\n", " | "))
             break
     except Exception as e:
         print("Cycle", date, cycle, "failed:", e)
-        time.sleep(0.5)
+        time.sleep(0.4)
 
 if not chosen:
-    print("No RRFS cycle available")
     payload = {"updated_at": now.isoformat(), "sites": {}, "error": "no cycle"}
     Path("data/rrfs-hourly.json").write_text(json.dumps(payload, indent=2))
+    print("No cycle found")
     raise SystemExit(0)
 
 date, cycle = chosen
-meta["date"] = date
-meta["cycle"] = cycle
-Path("data/rrfs-raw-sample.txt").write_text(sample_raw[:3000])
-
-# Parse sample headers for debug
-try:
-    rows, fields = parse_csv(sample_raw)
-    print("Fields:", fields)
-    print("Sample rows:", len(rows))
-except Exception as e:
-    print("Parse sample error", e)
+Path("data/rrfs-raw-sample.txt").write_text(sample_raw[:4000])
+sm, fields = parse_station_csv(sample_raw, "KCMH", date, cycle)
+print("Fields:", fields)
+print("KCMH parsed hours:", len(sm), list(sm.items())[:3])
 
 for i, station in enumerate(SITE_IDS):
     try:
-        raw = fetch_station(station, date, cycle) if station != "KCMH" else sample_raw
-        reader = csv.DictReader(io.StringIO(raw))
-        site_map = {}
-        for row in reader:
-            clean = {(k or "").strip().lower(): (v or "").strip() for k, v in row.items()}
-            temp = clean.get("tmp2m")
-            if temp in (None, ""):
-                continue
-            try:
-                temp_f = round(float(temp), 1)
-            except ValueError:
-                continue
-            # Build hour key from valid time if present
-            vt = clean.get("valid_time") or clean.get("validtime") or clean.get("time") or ""
-            fhr = clean.get("fhour") or clean.get("forecast_hour") or clean.get("hour")
-            key = None
-            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y%m%d%H", "%m/%d/%Y %H:%M"):
-                try:
-                    dt = datetime.strptime(vt[:19], fmt)
-                    key = dt.strftime("%Y-%m-%d") + "T" + f"{dt.hour:02d}:00"
-                    break
-                except Exception:
-                    pass
-            if key is None and fhr not in (None, ""):
-                try:
-                    init = datetime.strptime(date + cycle, "%Y%m%d%H")
-                    dt = init + timedelta(hours=int(float(fhr)))
-                    key = dt.strftime("%Y-%m-%d") + "T" + f"{dt.hour:02d}:00"
-                except Exception:
-                    continue
-            if key is None:
-                continue
-            site_map[key] = temp_f
+        raw = sample_raw if station == "KCMH" else fetch_station(station, date, cycle)
+        site_map, _ = parse_station_csv(raw, station, date, cycle)
         if site_map:
             out[station] = site_map
         if (i + 1) % 10 == 0:
@@ -149,3 +159,6 @@ payload = {
 }
 Path("data/rrfs-hourly.json").write_text(json.dumps(payload, indent=2))
 print("Wrote RRFS sites:", len(out))
+if out:
+    s0 = next(iter(out))
+    print("Example", s0, "->", len(out[s0]), "hours", list(out[s0].items())[:2])
