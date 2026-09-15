@@ -35,11 +35,18 @@ def fetch_station(station, date, cycle):
         return resp.read().decode("utf-8", errors="replace")
 
 
+def to_eastern_key(dt_utc_naive):
+    """Model times are Z/UTC; convert to US/Eastern wall time for graph alignment."""
+    from zoneinfo import ZoneInfo
+    dt_utc = dt_utc_naive.replace(tzinfo=timezone.utc)
+    dt_east = dt_utc.astimezone(ZoneInfo("America/New_York"))
+    return dt_east.strftime("%Y-%m-%d") + "T" + f"{dt_east.hour:02d}:00"
+
+
 def parse_time_to_key(traw, init_date, init_cycle):
     if not traw:
         return None
     traw = traw.strip()
-    # Try full datetimes
     for fmt in (
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%dT%H:%M:%S",
@@ -51,15 +58,14 @@ def parse_time_to_key(traw, init_date, init_cycle):
     ):
         try:
             dt = datetime.strptime(traw[:19], fmt) if len(traw) >= 10 else datetime.strptime(traw, fmt)
-            return dt.strftime("%Y-%m-%d") + "T" + f"{dt.hour:02d}:00"
+            return to_eastern_key(dt)
         except Exception:
             pass
-    # forecast hour number
     try:
         fhr = int(float(traw))
-        init = datetime.strptime(init_date + init_cycle, "%Y%m%d%H")
+        init = datetime.strptime(init_date + init_cycle, "%Y%m%d%H")  # Z cycle
         dt = init + timedelta(hours=fhr)
-        return dt.strftime("%Y-%m-%d") + "T" + f"{dt.hour:02d}:00"
+        return to_eastern_key(dt)
     except Exception:
         return None
 
