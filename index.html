@@ -652,8 +652,23 @@
         document.getElementById('tempStatus').textContent = 'Updating...';
         tempLayerGroup.clearLayers();
 
-        const bounds = map.getBounds().pad(0.25);
+        const bounds = map.getBounds().pad(0.2);
+        const z = map.getZoom();
+        // Zoom density: out = majors only; mid = regional; in = all in view
+        const MAJOR = new Set([
+            "KCMH","KDAY","KCLE","KCVG","KIND","KDTW","KORD","KMDW","KMKE","KMSP",
+            "KSTL","KMCI","KJFK","KLGA","KEWR","KPHL","KPIT","KBWI","KDCA","KIAD",
+            "KBOS","KBUF","KCLT","KRDU","KATL","KBNA","KMEM","KSDF","KMIA","KMCO",
+            "KTPA","KIAH","KDFW","KAUS","KSAT","KOKC","KMSY","KDEN","KPHX","KLAS",
+            "KSEA","KLAX","KSFO"
+        ]);
         let candidates = US_STATIONS.filter(s => bounds.contains([s.lat, s.lon]));
+        if (z < 5) {
+            candidates = candidates.filter(s => MAJOR.has(s.id));
+        } else if (z < 7) {
+            // keep majors + every other non-major to thin secondary airports
+            candidates = candidates.filter((s, i) => MAJOR.has(s.id) || (i % 2 === 0));
+        }
         if (candidates.length > CONFIG.maxTempsToFetch) {
             const center = map.getCenter();
             candidates.sort((a,b) => Math.hypot(a.lat-center.lat,a.lon-center.lng) - Math.hypot(b.lat-center.lat,b.lon-center.lng));
@@ -923,10 +938,14 @@
         });
 
         const rrfsSeries = hourLabels.map((_, h) => {
-            const key = dayPrefix + String(h).padStart(2,'0') + ':00';
-            if (rrfsData && rrfsData.sites && rrfsData.sites[station.id] && rrfsData.sites[station.id][key] != null) {
-                return rrfsData.sites[station.id][key];
-            }
+            if (!rrfsData || !rrfsData.sites || !rrfsData.sites[station.id]) return null;
+            const site = rrfsData.sites[station.id];
+            // local hour h today -> try local key, then UTC key for same instant
+            const localKey = dayPrefix + String(h).padStart(2,'0') + ':00';
+            if (site[localKey] != null) return site[localKey];
+            const localDt = new Date(y, now.getMonth(), now.getDate(), h, 0, 0);
+            const utcKey = localDt.getUTCFullYear() + '-' + String(localDt.getUTCMonth()+1).padStart(2,'0') + '-' + String(localDt.getUTCDate()).padStart(2,'0') + 'T' + String(localDt.getUTCHours()).padStart(2,'0') + ':00';
+            if (site[utcKey] != null) return site[utcKey];
             return null;
         });
 
