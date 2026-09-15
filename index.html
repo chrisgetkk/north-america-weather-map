@@ -939,14 +939,10 @@
 
         const rrfsSeries = hourLabels.map((_, h) => {
             if (!rrfsData || !rrfsData.sites || !rrfsData.sites[station.id]) return null;
-            const site = rrfsData.sites[station.id];
-            // local hour h today -> try local key, then UTC key for same instant
+            // RRFS keys are stored in US/Eastern wall time (same as graph axis)
             const localKey = dayPrefix + String(h).padStart(2,'0') + ':00';
-            if (site[localKey] != null) return site[localKey];
-            const localDt = new Date(y, now.getMonth(), now.getDate(), h, 0, 0);
-            const utcKey = localDt.getUTCFullYear() + '-' + String(localDt.getUTCMonth()+1).padStart(2,'0') + '-' + String(localDt.getUTCDate()).padStart(2,'0') + 'T' + String(localDt.getUTCHours()).padStart(2,'0') + ':00';
-            if (site[utcKey] != null) return site[utcKey];
-            return null;
+            const v = rrfsData.sites[station.id][localKey];
+            return (v != null) ? v : null;
         });
 
         const ctx = document.getElementById('tempChart').getContext('2d');
