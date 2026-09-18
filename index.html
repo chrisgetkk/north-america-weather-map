@@ -879,15 +879,15 @@
     }
 
     function startRadarLoop() {
-        if (radarPlaying || !iemRadarLayers.length) {
-            if (!iemRadarLayers.length) loadRadarFrames();
-            if (!iemRadarLayers.length) return;
-        }
+        if (radarPlaying) return;
+        if (!iemRadarLayers.length) loadRadarFrames();
+        if (!iemRadarLayers.length) return;
         radarPlaying = true;
         document.getElementById('playBtn').style.opacity = '0.5';
         const tick = () => {
             if (!radarPlaying) return;
-            radarCurrentIndex = (radarCurrentIndex + 1) % iemRadarLayers.length;
+            // Cycle all IEM time frames (not the 2 display layers)
+            radarCurrentIndex = (radarCurrentIndex + 1) % IEM_TIMESTAMPS.length;
             showRadarFrame(radarCurrentIndex);
             radarTimer = setTimeout(tick, getRadarSpeedMs());
         };
