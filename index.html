@@ -763,15 +763,26 @@
             } catch(e) { return null; }
         });
 
-        const results = await Promise.all(promises);
+        const results = (await Promise.all(promises)).filter(Boolean);
+        // Relative color scale from all loaded station temps (quartiles)
+        const allTemps = results.map(r => r.tempF).sort((a,b) => a - b);
+        function relativeClass(t) {
+            if (allTemps.length < 4) {
+                if (t >= 90) return 'hot';
+                if (t >= 70) return 'warm';
+                if (t >= 40) return 'cool';
+                return 'cold';
+            }
+            const q = (p) => allTemps[Math.min(allTemps.length - 1, Math.floor(p * (allTemps.length - 1)))];
+            const q25 = q(0.25), q50 = q(0.50), q75 = q(0.75);
+            if (t >= q75) return 'hot';
+            if (t >= q50) return 'warm';
+            if (t >= q25) return 'cool';
+            return 'cold';
+        }
         results.forEach(r => {
-            if (!r) return;
             success++;
-            let cls = 'temp-marker';
-            if (r.tempF >= 90) cls += ' hot';
-            else if (r.tempF >= 70) cls += ' warm';
-            else if (r.tempF >= 40) cls += ' cool';
-            else cls += ' cold';
+            const cls = 'temp-marker ' + relativeClass(r.tempF);
 
             let diffHtml = '';
             if (r.forecastF != null) {
