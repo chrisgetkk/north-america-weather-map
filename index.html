@@ -91,35 +91,36 @@
         .alert-item:last-child { border-bottom: none; margin-bottom: 0; }
         
         .temp-marker {
-            background: rgba(15, 23, 42, 0.92);
+            background: rgba(15, 23, 42, 0.45);
             border: 2px solid #38bdf8;
-            border-radius: 10px;
+            border-radius: 50%;
             color: #fff;
             font-weight: 700;
-            font-size: 12px;
+            font-size: 11px;
             text-align: center;
-            line-height: 1.15;
-            width: 44px !important;
-            height: 40px !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+            line-height: 1.1;
+            width: 42px !important;
+            height: 36px !important;
+            box-shadow: 0 1px 6px rgba(0,0,0,0.35);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding-top: 2px;
+            padding-top: 1px;
+            text-shadow: 0 0 3px #000, 0 1px 2px #000;
         }
         .temp-marker .diff {
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 700;
             line-height: 1;
         }
         .temp-marker .diff.pos { color: #fca5a5; }
         .temp-marker .diff.neg { color: #93c5fd; }
         .temp-marker .diff.zero { color: #cbd5e1; }
-        .temp-marker.hot  { border-color: #ef4444; background: rgba(127, 29, 29, 0.92); }
-        .temp-marker.warm { border-color: #f97316; }
-        .temp-marker.cool { border-color: #3b82f6; }
-        .temp-marker.cold { border-color: #06b6d4; background: rgba(8, 47, 73, 0.92); }
+        .temp-marker.hot  { border-color: #ef4444; background: rgba(127, 29, 29, 0.40); }
+        .temp-marker.warm { border-color: #f97316; background: rgba(154, 52, 18, 0.35); }
+        .temp-marker.cool { border-color: #3b82f6; background: rgba(30, 58, 138, 0.35); }
+        .temp-marker.cold { border-color: #06b6d4; background: rgba(8, 47, 73, 0.40); }
         
         .city-label {
             background: transparent; border: none; color: #e2e8f0; font-weight: 600;
@@ -448,6 +449,10 @@
             updateCityLabels();
             if (tempFetchTimeout) clearTimeout(tempFetchTimeout);
             tempFetchTimeout = setTimeout(fetchTemperaturesForView, 700);
+            // Keep radar tiles alive after zoom
+            if (document.getElementById('radarSelect').value === 'on' && iemRadarLayers.length) {
+                showRadarFrame(radarCurrentIndex);
+            }
         });
 
         document.getElementById('toggleBtn').addEventListener('click', function(e) {
@@ -484,7 +489,9 @@
         document.getElementById('pauseBtn').addEventListener('click', stopRadarLoop);
         document.getElementById('refreshBtn').addEventListener('click', () => {
             Promise.all([loadForecastFile(), loadRrfsFile()]).then(fetchTemperaturesForView);
-            loadRadarFrames(); fetchAlerts(); loadSatellite();
+            clearIemRadar();
+            loadRadarFrames();
+            fetchAlerts(); loadSatellite();
         });
 
         Promise.all([loadForecastFile(), loadRrfsFile()]).then(() => {
@@ -636,6 +643,25 @@
         }
         if (dewF != null) html += `<div class="row"><span class="label">Dew Point</span><span class="value">${dewF}°F (${dewC}°C)</span></div>`;
         if (rh != null) html += `<div class="row"><span class="label">Humidity</span><span class="value">${rh}%</span></div>`;
+        // Heat index (warm) / wind chill (cold) from NWS props or simple thresholds
+        let hiF = null, wcF = null;
+        if (p.heatIndex?.value != null) hiF = Math.round(p.heatIndex.value * 9/5 + 32);
+        if (p.windChill?.value != null) wcF = Math.round(p.windChill.value * 9/5 + 32);
+        if (hiF == null && r.tempF >= 80 && rh != null) {
+            // Rothfusz regression simplified (NWS) using F and RH%
+            const T = r.tempF, R = rh;
+            hiF = Math.round(-42.379 + 2.04901523*T + 10.14333127*R - 0.22475541*T*R
+                - 0.00683783*T*T - 0.05481717*R*R + 0.00122874*T*T*R
+                + 0.00085282*T*R*R - 0.00000199*T*T*R*R);
+            if (hiF < r.tempF) hiF = r.tempF;
+        }
+        if (wcF == null && r.tempF <= 50 && windKt != null && windKt >= 3) {
+            const V = windKt * 1.15078; // mph
+            const T = r.tempF;
+            wcF = Math.round(35.74 + 0.6215*T - 35.75*Math.pow(V,0.16) + 0.4275*T*Math.pow(V,0.16));
+        }
+        if (hiF != null && r.tempF >= 80) html += `<div class="row"><span class="label">Heat Index</span><span class="value">${hiF}°F</span></div>`;
+        if (wcF != null && r.tempF <= 50) html += `<div class="row"><span class="label">Wind Chill</span><span class="value">${wcF}°F</span></div>`;
         html += `<div class="row"><span class="label">Wind</span><span class="value">${windText(windDeg, windKt)}</span></div>`;
         if (windGustKt) html += `<div class="row"><span class="label">Gusts</span><span class="value">${Math.round(windGustKt)} kt</span></div>`;
         if (visMi) html += `<div class="row"><span class="label">Visibility</span><span class="value">${visMi} mi</span></div>`;
@@ -713,8 +739,8 @@
             const icon = L.divIcon({
                 className: cls,
                 html: `<div>${r.tempF}°</div>${diffHtml}`,
-                iconSize: [44, 40],
-                iconAnchor: [22, 20]
+                iconSize: [42, 36],
+                iconAnchor: [21, 18]
             });
             L.marker([r.station.lat, r.station.lon], {icon})
                 .bindPopup(buildUSPopup(r), {maxWidth: 280})
@@ -730,25 +756,34 @@
         '900913-m25m','900913-m20m','900913-m15m','900913-m10m','900913-m05m','900913'
     ];
 
+    function radarTileUrl(ts) {
+        return 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-' + ts + '/{z}/{x}/{y}.png';
+    }
+
     function clearIemRadar() {
         iemRadarLayers.forEach(l => { try { map.removeLayer(l); } catch(e){} });
+        iemRadarLayers = [];
     }
 
     function initIemRadarLayers() {
         if (iemRadarLayers.length) return;
-        const tpl = 'https://mesonet.agron.iastate.edu/cache/tile.py/1.0.0/nexrad-n0q-{ts}/{z}/{x}/{y}.png';
-        IEM_TIMESTAMPS.forEach(ts => {
-            iemRadarLayers.push(L.tileLayer(tpl.replace('{ts}', ts), {
-                opacity: 0, maxZoom: 14, zIndex: 200,
-                attribution: 'Radar © Iowa State / NEXRAD'
-            }));
-        });
-        iemRadarLayers.forEach(l => l.addTo(map));
+        // One visible layer + one preload layer (avoids blank tiles on zoom)
+        const opts = {
+            opacity: CONFIG.radarOpacity, maxZoom: 14, maxNativeZoom: 10, zIndex: 200,
+            attribution: 'Radar © Iowa State / NEXRAD',
+            className: 'iem-radar-tiles'
+        };
+        const a = L.tileLayer(radarTileUrl(IEM_TIMESTAMPS[IEM_TIMESTAMPS.length - 1]), opts);
+        const b = L.tileLayer(radarTileUrl(IEM_TIMESTAMPS[IEM_TIMESTAMPS.length - 1]), Object.assign({}, opts, { opacity: 0 }));
+        a.addTo(map);
+        b.addTo(map);
+        iemRadarLayers = [a, b];
+        window._iemRadarActive = 0;
     }
 
     function loadRadarFrames() {
         if (document.getElementById('radarSelect').value !== 'on') return;
-        initIemRadarLayers();
+        if (!iemRadarLayers.length) initIemRadarLayers();
         radarCurrentIndex = IEM_TIMESTAMPS.length - 1;
         showRadarFrame(radarCurrentIndex);
         document.getElementById('radarStatus').textContent = IEM_TIMESTAMPS.length + ' frames (IEM)';
@@ -756,14 +791,27 @@
 
     function showRadarFrame(index) {
         if (!iemRadarLayers.length) initIemRadarLayers();
-        index = Math.max(0, Math.min(index, iemRadarLayers.length - 1));
+        index = Math.max(0, Math.min(index, IEM_TIMESTAMPS.length - 1));
         radarCurrentIndex = index;
-        iemRadarLayers.forEach((l, i) => l.setOpacity(i === index ? CONFIG.radarOpacity : 0));
         const ts = IEM_TIMESTAMPS[index];
+        const active = window._iemRadarActive || 0;
+        const next = active === 0 ? 1 : 0;
+        const nextLayer = iemRadarLayers[next];
+        const currLayer = iemRadarLayers[active];
+        nextLayer.setUrl(radarTileUrl(ts));
+        nextLayer.setOpacity(0);
+        const reveal = () => {
+            nextLayer.setOpacity(CONFIG.radarOpacity);
+            currLayer.setOpacity(0);
+            window._iemRadarActive = next;
+        };
+        // Reveal after a short load window; also on load event
+        nextLayer.once('load', reveal);
+        setTimeout(reveal, 400);
         const mins = ts === '900913' ? 0 : (parseInt(ts.replace('900913-m','').replace('m',''), 10) || 0);
         const t = mins === 0 ? 'Now' : (mins + ' min ago');
         document.getElementById('radarTimeLabel').textContent = t;
-        document.getElementById('radarStatus').textContent = (index+1) + '/' + iemRadarLayers.length;
+        document.getElementById('radarStatus').textContent = (index+1) + '/' + IEM_TIMESTAMPS.length;
     }
 
     function getRadarSpeedMs() {
