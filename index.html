@@ -825,18 +825,18 @@
 
     function initIemRadarLayers() {
         if (iemRadarLayers.length) return;
-        // One visible layer + one preload layer (avoids blank tiles on zoom)
-        const opts = {
-            opacity: CONFIG.radarOpacity, maxZoom: 14, maxNativeZoom: 10, zIndex: 200,
-            attribution: 'Radar © Iowa State / NEXRAD',
-            className: 'iem-radar-tiles'
-        };
-        const a = L.tileLayer(radarTileUrl(IEM_TIMESTAMPS[IEM_TIMESTAMPS.length - 1]), opts);
-        const b = L.tileLayer(radarTileUrl(IEM_TIMESTAMPS[IEM_TIMESTAMPS.length - 1]), Object.assign({}, opts, { opacity: 0 }));
-        a.addTo(map);
-        b.addTo(map);
-        iemRadarLayers = [a, b];
-        window._iemRadarActive = 0;
+        // Preload all time frames; play = opacity only (smoother loop)
+        IEM_TIMESTAMPS.forEach((ts) => {
+            const layer = L.tileLayer(radarTileUrl(ts), {
+                opacity: 0,
+                maxZoom: 14,
+                maxNativeZoom: 12,
+                zIndex: 200,
+                attribution: 'Radar © Iowa State / NEXRAD'
+            });
+            layer.addTo(map);
+            iemRadarLayers.push(layer);
+        });
     }
 
     function loadRadarFrames() {
@@ -851,21 +851,10 @@
         if (!iemRadarLayers.length) initIemRadarLayers();
         index = Math.max(0, Math.min(index, IEM_TIMESTAMPS.length - 1));
         radarCurrentIndex = index;
+        iemRadarLayers.forEach((l, i) => {
+            l.setOpacity(i === index ? CONFIG.radarOpacity : 0);
+        });
         const ts = IEM_TIMESTAMPS[index];
-        const active = window._iemRadarActive || 0;
-        const next = active === 0 ? 1 : 0;
-        const nextLayer = iemRadarLayers[next];
-        const currLayer = iemRadarLayers[active];
-        nextLayer.setUrl(radarTileUrl(ts));
-        nextLayer.setOpacity(0);
-        const reveal = () => {
-            nextLayer.setOpacity(CONFIG.radarOpacity);
-            currLayer.setOpacity(0);
-            window._iemRadarActive = next;
-        };
-        // Reveal after a short load window; also on load event
-        nextLayer.once('load', reveal);
-        setTimeout(reveal, 400);
         const mins = ts === '900913' ? 0 : (parseInt(ts.replace('900913-m','').replace('m',''), 10) || 0);
         const t = mins === 0 ? 'Now' : (mins + ' min ago');
         document.getElementById('radarTimeLabel').textContent = t;
