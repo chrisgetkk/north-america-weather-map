@@ -764,25 +764,27 @@
         });
 
         const results = (await Promise.all(promises)).filter(Boolean);
-        // Relative color scale from all loaded station temps (quartiles)
-        const allTemps = results.map(r => r.tempF).sort((a,b) => a - b);
-        function relativeClass(t) {
-            if (allTemps.length < 4) {
-                if (t >= 90) return 'hot';
-                if (t >= 70) return 'warm';
-                if (t >= 40) return 'cool';
-                return 'cold';
-            }
-            const q = (p) => allTemps[Math.min(allTemps.length - 1, Math.floor(p * (allTemps.length - 1)))];
-            const q25 = q(0.25), q50 = q(0.50), q75 = q(0.75);
-            if (t >= q75) return 'hot';
-            if (t >= q50) return 'warm';
-            if (t >= q25) return 'cool';
-            return 'cold';
+        // Continuous relative gradient: coldest -> hottest among all loaded stations
+        const allTemps = results.map(r => r.tempF);
+        const tMin = allTemps.length ? Math.min(...allTemps) : 0;
+        const tMax = allTemps.length ? Math.max(...allTemps) : 1;
+        const tSpan = Math.max(1, tMax - tMin);
+        function tempToColor(t) {
+            // 0 = cold cyan/blue, 1 = hot red; smooth via HSL
+            let u = (t - tMin) / tSpan;
+            u = Math.max(0, Math.min(1, u));
+            // hue: 210 (blue) -> 120 (green skip) -> 60 (yellow) -> 0 (red)
+            // use 210 -> 0 for a clean cool-to-warm path
+            const hue = 210 * (1 - u);
+            const sat = 85;
+            const light = 48;
+            const border = `hsl(${hue}, ${sat}%, ${light}%)`;
+            const fill = `hsla(${hue}, ${sat}%, ${light}%, 0.32)`;
+            return { border, fill };
         }
         results.forEach(r => {
             success++;
-            const cls = 'temp-marker ' + relativeClass(r.tempF);
+            const col = tempToColor(r.tempF);
 
             let diffHtml = '';
             if (r.forecastF != null) {
@@ -793,8 +795,8 @@
             }
 
             const icon = L.divIcon({
-                className: cls,
-                html: `<div class="pin"><div class="pin-inner"><div>${r.tempF}°</div>${diffHtml}</div></div>`,
+                className: 'temp-marker',
+                html: `<div class="pin" style="border-color:${col.border};background:${col.fill}"><div class="pin-inner"><div>${r.tempF}°</div>${diffHtml}</div></div>`,
                 iconSize: [36, 42],
                 iconAnchor: [18, 40]
             });
