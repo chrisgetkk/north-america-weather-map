@@ -2,8 +2,8 @@ name: Fetch RRFS Model
 
 on:
   schedule:
-    # ~ every 3 hours
-    - cron: "20 */3 * * *"
+    # Every 2 hours at :20 UTC — catches new cycles soon after they finish (~2h after init)
+    - cron: "20 */2 * * *"
   workflow_dispatch:
 
 jobs:
