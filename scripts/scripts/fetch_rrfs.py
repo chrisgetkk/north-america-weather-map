@@ -165,11 +165,12 @@ SITE_IDS = [
 
 
 def candidate_cycles(now_utc):
+    # Long RRFS runs only (00/06/12/18z) — out to ~84h, slower to publish
     out = []
     base = now_utc.replace(minute=0, second=0, microsecond=0)
-    for hours_back in range(0, 24):
+    for hours_back in range(0, 36):
         t = base - timedelta(hours=hours_back)
-        if t.hour % 3 == 0:
+        if t.hour in (0, 6, 12, 18):
             out.append((t.strftime("%Y%m%d"), f"{t.hour:02d}"))
     return out
 
