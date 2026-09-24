@@ -472,6 +472,7 @@
     let rainviewerHost = "https://tilecache.rainviewer.com";
     let tempChart = null;
     let rrfsData = null;
+    let hrrrData = null;
     let tempFetchTimeout = null;
     let panelMinimized = false;
     let forecastData = null; // { sites: { KCMH: { "2026-09-10T15:00": 83.5 } } }
@@ -537,13 +538,13 @@
         document.getElementById('playBtn').addEventListener('click', startRadarLoop);
         document.getElementById('pauseBtn').addEventListener('click', stopRadarLoop);
         document.getElementById('refreshBtn').addEventListener('click', () => {
-            Promise.all([loadForecastFile(), loadRrfsFile()]).then(fetchTemperaturesForView);
+            Promise.all([loadForecastFile(), loadRrfsFile(), loadHrrrFile()]).then(fetchTemperaturesForView);
             clearIemRadar();
             loadRadarFrames();
             fetchAlerts(); loadSatellite();
         });
 
-        Promise.all([loadForecastFile(), loadRrfsFile()]).then(() => {
+        Promise.all([loadForecastFile(), loadRrfsFile(), loadHrrrFile()]).then(() => {
             fetchTemperaturesForView();
         });
         loadRadarFrames();
@@ -582,6 +583,15 @@
     }
 
     
+    
+    async function loadHrrrFile() {
+        try {
+            const resp = await fetch('data/hrrr-hourly.json?t=' + Date.now());
+            if (!resp.ok) { hrrrData = null; return; }
+            hrrrData = await resp.json();
+        } catch (e) { hrrrData = null; }
+    }
+
     async function loadRrfsFile() {
         try {
             const resp = await fetch('data/rrfs-hourly.json?t=' + Date.now());
@@ -1068,9 +1078,14 @@
 
         const rrfsSeries = hourLabels.map((_, h) => {
             if (!rrfsData || !rrfsData.sites || !rrfsData.sites[station.id]) return null;
-            // RRFS keys are stored in US/Eastern wall time (same as graph axis)
             const localKey = dayPrefix + String(h).padStart(2,'0') + ':00';
             const v = rrfsData.sites[station.id][localKey];
+            return (v != null) ? v : null;
+        });
+        const hrrrSeries = hourLabels.map((_, h) => {
+            if (!hrrrData || !hrrrData.sites || !hrrrData.sites[station.id]) return null;
+            const localKey = dayPrefix + String(h).padStart(2,'0') + ':00';
+            const v = hrrrData.sites[station.id][localKey];
             return (v != null) ? v : null;
         });
 
@@ -1101,9 +1116,19 @@
                         pointRadius: 2
                     },
                     {
+                        label: 'HRRR model',
+                        data: hrrrSeries,
+                        borderColor: '#c084fc',
+                        backgroundColor: 'transparent',
+                        borderDash: [4,3],
+                        spanGaps: true,
+                        tension: 0.25,
+                        pointRadius: 2
+                    },
+                    {
                         label: 'RRFS model',
                         data: rrfsSeries,
-                        borderColor: '#22c55e',
+                        borderColor: '#2dd4bf',
                         backgroundColor: 'transparent',
                         borderDash: [2,2],
                         spanGaps: true,
@@ -1124,8 +1149,9 @@
                 }
             }
         });
+        const hrrrMeta = (hrrrData && hrrrData.forecast_init) ? (' · HRRR ' + hrrrData.forecast_init) : ' · HRRR n/a';
         const rrfsMeta = (rrfsData && rrfsData.forecast_init) ? (' · RRFS ' + rrfsData.forecast_init) : ' · RRFS n/a';
-        document.getElementById('graphMeta').textContent = 'Blue = observed · Orange = WSI · Green = RRFS' + rrfsMeta;
+        document.getElementById('graphMeta').textContent = 'Blue = observed · Orange = WSI · Purple = HRRR · Teal = RRFS' + hrrrMeta + rrfsMeta;
     }
 
 
