@@ -265,18 +265,28 @@ print("Trying cycles:", cycles[:8])
 
 chosen = None
 sample_raw = None
-for date, cycle in cycles:
-    try:
-        raw = fetch_station("KCMH", date, cycle)
-        if "tmp2m" in raw.lower() and len(raw) > 50:
-            chosen = (date, cycle)
-            sample_raw = raw
-            print("Using cycle", date, cycle, "len", len(raw))
-            print("HEAD:", raw[:250].replace("\n", " | "))
-            break
-    except Exception as e:
-        print("Cycle", date, cycle, "failed:", e)
-        time.sleep(0.4)
+
+def try_cycles(cycle_list, tag):
+    for date, cycle in cycle_list:
+        try:
+            raw = fetch_station("KCMH", date, cycle)
+            if "tmp2m" in raw.lower() and len(raw) > 50:
+                print(tag, "Using cycle", date, cycle, "len", len(raw))
+                return (date, cycle), raw
+        except Exception as e:
+            print(tag, "Cycle", date, cycle, "failed:", e)
+            time.sleep(0.3)
+    return None, None
+
+# Newest cycle first; one 12-minute retry if it 404s, then older cycles (KCMH probe only)
+if cycles:
+    chosen, sample_raw = try_cycles([cycles[0]], "[RRFS newest]")
+    if chosen is None:
+        print("[RRFS] Newest cycle not ready; waiting 12 minutes for one retry...")
+        time.sleep(720)
+        chosen, sample_raw = try_cycles([cycles[0]], "[RRFS newest-retry]")
+    if chosen is None and len(cycles) > 1:
+        chosen, sample_raw = try_cycles(cycles[1:], "[RRFS older]")
 
 if not chosen:
     payload = {"updated_at": now.isoformat(), "sites": {}, "error": "no cycle"}
