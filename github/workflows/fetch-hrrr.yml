@@ -2,7 +2,6 @@ name: Fetch HRRR Model
 
 on:
   schedule:
-    # Hourly at :35 UTC — after typical HRRR publish lag
     - cron: "35 * * * *"
   workflow_dispatch:
 
