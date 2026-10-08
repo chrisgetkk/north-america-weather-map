@@ -25,7 +25,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           mkdir -p data
-          git add data/rrfs-hourly.json data/rrfs-raw-sample.txt || true
-          git commit -m "Update RRFS $(date -u +%Y-%m-%dT%H%M)" || echo "No RRFS changes to commit"
+          git add data/hrrr-hourly.json data/hrrr-raw-sample.txt
+          git status
+          git commit -m "Update HRRR $(date -u +%Y-%m-%dT%H%M)" || echo "No HRRR file changes to commit"
           git pull --rebase --autostash origin main
           git push
