@@ -132,6 +132,20 @@
         .temp-marker.warm .pin { border-color: #f97316; background: rgba(154, 52, 18, 0.28); }
         .temp-marker.cool .pin { border-color: #3b82f6; background: rgba(30, 58, 138, 0.28); }
         .temp-marker.cold .pin { border-color: #06b6d4; background: rgba(8, 47, 73, 0.30); }
+
+        .temp-marker.intl .pin {
+            border-radius: 50%;
+            transform: none;
+            width: 32px; height: 32px;
+        }
+        .temp-marker.intl .pin-inner {
+            transform: none;
+            font-size: 10px;
+        }
+        .temp-marker.intl .precip {
+            font-size: 8px; color: #7dd3fc; font-weight: 700;
+        }
+
         
         .city-label {
             background: transparent; border: none; color: #e2e8f0; font-weight: 600;
@@ -212,8 +226,9 @@
             <div class="control-group">
                 <label>Radar Overlay</label>
                 <select id="radarSelect">
-                    <option value="live" selected>Live NEXRAD (IEM)</option>
-                    <option value="hrrr">Future HRRR (IEM)</option>
+                    <option value="live" selected>Live NEXRAD (US / IEM)</option>
+                    <option value="hrrr">Future HRRR (US / IEM)</option>
+                    <option value="global">Global radar (RainViewer)</option>
                     <option value="off">Off</option>
                 </select>
                 <div class="btn-row">
@@ -231,7 +246,8 @@
             <div class="control-group">
                 <label>Temperature Markers</label>
                 <select id="tempSelect">
-                    <option value="on" selected>On (with forecast diff)</option>
+                    <option value="on" selected>On (US + Europe + Brazil)</option>
+                    <option value="us">US only</option>
                     <option value="off">Off</option>
                 </select>
             </div>
@@ -465,7 +481,10 @@
         {name:"Nashville",lat:36.16,lon:-86.78},{name:"Charlotte",lat:35.23,lon:-80.84}
     ];
 
-    let map, cityLayerGroup, tempLayerGroup, alertLayerGroup;
+    let map, cityLayerGroup, tempLayerGroup, intlTempLayerGroup, alertLayerGroup;
+    let rainViewerFrames = [];
+    let rainViewerLayer = null;
+
     let satLayer = null;
     let radarPlaying = false, radarTimer = null, radarCurrentIndex = 0;
     let iemRadarLayers = [];
@@ -489,6 +508,7 @@
 
         cityLayerGroup = L.layerGroup().addTo(map);
         tempLayerGroup = L.layerGroup().addTo(map);
+        intlTempLayerGroup = L.layerGroup().addTo(map);
         alertLayerGroup = L.layerGroup().addTo(map);
 
         updateCityLabels();
@@ -514,16 +534,25 @@
             stopRadarLoop();
             if (document.getElementById('radarSelect').value === 'off') {
                 clearIemRadar();
+                clearRainViewer();
                 document.getElementById('radarStatus').textContent = 'Off';
                 document.getElementById('radarTimeLabel').textContent = 'Off';
             } else {
                 clearIemRadar();
+                clearRainViewer();
                 loadRadarFrames();
             }
         });
         document.getElementById('tempSelect').addEventListener('change', () => {
-            if (document.getElementById('tempSelect').value === 'on') fetchTemperaturesForView();
-            else { tempLayerGroup.clearLayers(); document.getElementById('tempStatus').textContent = 'Off'; }
+            const v = document.getElementById('tempSelect').value;
+            if (v === 'off') {
+                tempLayerGroup.clearLayers();
+                if (intlTempLayerGroup) intlTempLayerGroup.clearLayers();
+                document.getElementById('tempStatus').textContent = 'Off';
+            } else {
+                fetchTemperaturesForView();
+                fetchInternationalTemps();
+            }
         });
         document.getElementById('alertSelect').addEventListener('change', () => {
             if (document.getElementById('alertSelect').value === 'on') fetchAlerts();
@@ -538,20 +567,26 @@
         document.getElementById('playBtn').addEventListener('click', startRadarLoop);
         document.getElementById('pauseBtn').addEventListener('click', stopRadarLoop);
         document.getElementById('refreshBtn').addEventListener('click', () => {
-            Promise.all([loadForecastFile(), loadRrfsFile(), loadHrrrFile()]).then(fetchTemperaturesForView);
+            Promise.all([loadForecastFile(), loadRrfsFile(), loadHrrrFile()]).then(() => {
+                fetchTemperaturesForView();
+                fetchInternationalTemps();
+            });
             clearIemRadar();
+            clearRainViewer();
             loadRadarFrames();
             fetchAlerts(); loadSatellite();
         });
 
         Promise.all([loadForecastFile(), loadRrfsFile(), loadHrrrFile()]).then(() => {
             fetchTemperaturesForView();
+            fetchInternationalTemps();
         });
         loadRadarFrames();
         fetchAlerts();
         loadSatellite();
 
         setInterval(fetchTemperaturesForView, CONFIG.tempRefreshMs);
+        setInterval(fetchInternationalTemps, CONFIG.tempRefreshMs);
         setInterval(loadRadarFrames, CONFIG.radarRefreshMs);
         setInterval(fetchAlerts, CONFIG.alertRefreshMs);
         setInterval(loadForecastFile, 30 * 60 * 1000);
@@ -823,6 +858,172 @@
         document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
     }
 
+
+    // ----- Europe + Brazil (Open-Meteo; does not affect US NWS/WSI/HRRR/RRFS) -----
+    const EU_STATIONS = [
+        {id:"EGLL",name:"London",lat:51.47,lon:-0.46,region:"EU"},
+        {id:"LFPG",name:"Paris",lat:49.01,lon:2.55,region:"EU"},
+        {id:"EDDF",name:"Frankfurt",lat:50.04,lon:8.57,region:"EU"},
+        {id:"EHAM",name:"Amsterdam",lat:52.31,lon:4.77,region:"EU"},
+        {id:"LEMD",name:"Madrid",lat:40.47,lon:-3.56,region:"EU"},
+        {id:"LEBL",name:"Barcelona",lat:41.30,lon:2.08,region:"EU"},
+        {id:"LIRF",name:"Rome",lat:41.80,lon:12.25,region:"EU"},
+        {id:"LIMC",name:"Milan",lat:45.63,lon:8.73,region:"EU"},
+        {id:"LSZH",name:"Zurich",lat:47.46,lon:8.55,region:"EU"},
+        {id:"LOWW",name:"Vienna",lat:48.11,lon:16.57,region:"EU"},
+        {id:"EKCH",name:"Copenhagen",lat:55.62,lon:12.65,region:"EU"},
+        {id:"ENGM",name:"Oslo",lat:60.19,lon:11.10,region:"EU"},
+        {id:"ESSA",name:"Stockholm",lat:59.65,lon:17.94,region:"EU"},
+        {id:"EFHK",name:"Helsinki",lat:60.32,lon:24.96,region:"EU"},
+        {id:"EIDW",name:"Dublin",lat:53.43,lon:-6.25,region:"EU"},
+        {id:"EBBR",name:"Brussels",lat:50.90,lon:4.48,region:"EU"},
+        {id:"EPWA",name:"Warsaw",lat:52.17,lon:20.97,region:"EU"},
+        {id:"LKPR",name:"Prague",lat:50.10,lon:14.26,region:"EU"},
+        {id:"LHBP",name:"Budapest",lat:47.44,lon:19.26,region:"EU"},
+        {id:"LGAV",name:"Athens",lat:37.94,lon:23.94,region:"EU"},
+        {id:"LPPT",name:"Lisbon",lat:38.78,lon:-9.14,region:"EU"},
+        {id:"LTFM",name:"Istanbul",lat:41.28,lon:28.75,region:"EU"},
+        {id:"UKBB",name:"Kyiv",lat:50.34,lon:30.89,region:"EU"},
+        {id:"LRBS",name:"Bucharest",lat:44.50,lon:26.08,region:"EU"},
+        {id:"LDZA",name:"Zagreb",lat:45.74,lon:16.07,region:"EU"}
+    ];
+    const BR_STATIONS = [
+        {id:"SBGR",name:"Sao Paulo GRU",lat:-23.43,lon:-46.47,region:"BR"},
+        {id:"SBSP",name:"Sao Paulo CGH",lat:-23.63,lon:-46.66,region:"BR"},
+        {id:"SBRJ",name:"Rio Santos Dumont",lat:-22.91,lon:-43.16,region:"BR"},
+        {id:"SBGL",name:"Rio Galeao",lat:-22.81,lon:-43.25,region:"BR"},
+        {id:"SBBR",name:"Brasilia",lat:-15.87,lon:-47.92,region:"BR"},
+        {id:"SBCF",name:"Belo Horizonte",lat:-19.63,lon:-43.97,region:"BR"},
+        {id:"SBCT",name:"Curitiba",lat:-25.53,lon:-49.18,region:"BR"},
+        {id:"SBPA",name:"Porto Alegre",lat:-30.00,lon:-51.17,region:"BR"},
+        {id:"SBRF",name:"Recife",lat:-8.13,lon:-34.92,region:"BR"},
+        {id:"SBFZ",name:"Fortaleza",lat:-3.78,lon:-38.53,region:"BR"},
+        {id:"SBEG",name:"Manaus",lat:-3.04,lon:-60.05,region:"BR"},
+        {id:"SBSV",name:"Salvador",lat:-12.91,lon:-38.33,region:"BR"}
+    ];
+    const INTL_STATIONS = EU_STATIONS.concat(BR_STATIONS);
+
+    async function fetchInternationalTemps() {
+        const mode = document.getElementById('tempSelect').value;
+        if (mode === 'off' || mode === 'us') {
+            if (intlTempLayerGroup) intlTempLayerGroup.clearLayers();
+            return;
+        }
+        if (!intlTempLayerGroup) return;
+        intlTempLayerGroup.clearLayers();
+        try {
+            const lats = INTL_STATIONS.map(s => s.lat).join(',');
+            const lons = INTL_STATIONS.map(s => s.lon).join(',');
+            const url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lats +
+                '&longitude=' + lons +
+                '&current=temperature_2m,precipitation&temperature_unit=fahrenheit&precipitation_unit=inch&timezone=auto';
+            const resp = await fetch(url);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            const rows = Array.isArray(data) ? data : [data];
+            const temps = [];
+            rows.forEach((row, i) => {
+                const st = INTL_STATIONS[i];
+                if (!st || !row.current || row.current.temperature_2m == null) return;
+                const tempF = Math.round(row.current.temperature_2m);
+                const precip = row.current.precipitation != null ? Number(row.current.precipitation) : 0;
+                temps.push(tempF);
+                const tMin = 0, tMax = 1; // filled after
+                // marker built in second pass
+                st._tempF = tempF;
+                st._precip = precip;
+            });
+            if (!temps.length) return;
+            const lo = Math.min(...temps), hi = Math.max(...temps), span = Math.max(1, hi - lo);
+            INTL_STATIONS.forEach(st => {
+                if (st._tempF == null) return;
+                let u = (st._tempF - lo) / span;
+                u = Math.max(0, Math.min(1, u));
+                const hue = 210 * (1 - u);
+                const border = `hsl(${hue}, 85%, 48%)`;
+                const fill = `hsla(${hue}, 85%, 48%, 0.32)`;
+                const precipHtml = (st._precip > 0.01)
+                    ? `<div class="precip">${st._precip.toFixed(2)}"</div>` : '';
+                const icon = L.divIcon({
+                    className: 'temp-marker intl',
+                    html: `<div class="pin" style="border-color:${border};background:${fill}"><div class="pin-inner"><div>${st._tempF}°</div>${precipHtml}</div></div>`,
+                    iconSize: [36, 42],
+                    iconAnchor: [18, 40]
+                });
+                const precipLine = st._precip > 0.01
+                    ? `<div class="row"><span class="label">Precip (current)</span><span class="value">${st._precip.toFixed(2)} in</span></div>`
+                    : `<div class="row"><span class="label">Precip (current)</span><span class="value">0 in</span></div>`;
+                const html = `<div class="obs-popup"><h3>${st.name}</h3>
+                    <div class="row"><span class="label">Temperature</span><span class="value">${st._tempF}°F</span></div>
+                    ${precipLine}
+                    <div class="row"><span class="label">Source</span><span class="value">Open-Meteo (${st.region})</span></div>
+                    </div>`;
+                L.marker([st.lat, st.lon], {icon}).bindPopup(html, {maxWidth: 260}).addTo(intlTempLayerGroup);
+            });
+            const usStatus = document.getElementById('tempStatus').textContent || '';
+            if (!usStatus.includes('intl')) {
+                document.getElementById('tempStatus').textContent = usStatus + ' · intl ' + temps.length;
+            }
+        } catch (e) {
+            console.warn('intl temps', e);
+        }
+    }
+
+    // ----- RainViewer global radar (EU/BR/world; does not replace US IEM) -----
+    function clearRainViewer() {
+        if (rainViewerLayer) {
+            try { map.removeLayer(rainViewerLayer); } catch(e) {}
+            rainViewerLayer = null;
+        }
+        rainViewerFrames = [];
+    }
+
+    async function loadRainViewerFrames() {
+        clearRainViewer();
+        try {
+            const resp = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+            if (!resp.ok) throw new Error('RainViewer meta failed');
+            const meta = await resp.json();
+            const radar = (meta.radar && meta.radar.past) ? meta.radar.past : [];
+            const nowcast = (meta.radar && meta.radar.nowcast) ? meta.radar.nowcast : [];
+            rainViewerFrames = radar.concat(nowcast);
+            if (!rainViewerFrames.length) {
+                document.getElementById('radarStatus').textContent = 'Global: no frames';
+                return;
+            }
+            radarCurrentIndex = rainViewerFrames.length - 1;
+            showRainViewerFrame(radarCurrentIndex);
+            document.getElementById('radarStatus').textContent = rainViewerFrames.length + ' frames (RainViewer)';
+        } catch (e) {
+            document.getElementById('radarStatus').textContent = 'Global radar error';
+            console.warn(e);
+        }
+    }
+
+    function showRainViewerFrame(index) {
+        if (!rainViewerFrames.length) return;
+        index = Math.max(0, Math.min(index, rainViewerFrames.length - 1));
+        radarCurrentIndex = index;
+        const frame = rainViewerFrames[index];
+        const path = frame.path;
+        const url = 'https://tilecache.rainviewer.com' + path + '/256/{z}/{x}/{y}/2/1_1.png';
+        if (rainViewerLayer) {
+            rainViewerLayer.setUrl(url);
+            rainViewerLayer.setOpacity(CONFIG.radarOpacity);
+        } else {
+            rainViewerLayer = L.tileLayer(url, {
+                opacity: CONFIG.radarOpacity,
+                maxZoom: 12,
+                zIndex: 200,
+                attribution: 'Radar © RainViewer'
+            }).addTo(map);
+        }
+        const t = new Date(frame.time * 1000);
+        document.getElementById('radarTimeLabel').textContent = t.toLocaleTimeString();
+        document.getElementById('radarStatus').textContent = (index+1) + '/' + rainViewerFrames.length + ' (Global)';
+    }
+
+
     const IEM_LIVE_TIMESTAMPS = [
         '900913-m50m','900913-m45m','900913-m40m','900913-m35m','900913-m30m',
         '900913-m25m','900913-m20m','900913-m15m','900913-m10m','900913-m05m','900913'
@@ -869,6 +1070,13 @@
         const mode = document.getElementById('radarSelect').value;
         if (mode === 'off') return;
         stopRadarLoop();
+        if (mode === 'global') {
+            clearIemRadar();
+            radarMode = 'global';
+            loadRainViewerFrames();
+            return;
+        }
+        clearRainViewer();
         // Rebuild layers when switching live <-> hrrr
         if (mode !== radarMode || !iemRadarLayers.length) {
             clearIemRadar();
@@ -913,13 +1121,28 @@
 
     function startRadarLoop() {
         if (radarPlaying) return;
+        const mode = document.getElementById('radarSelect').value;
+        if (mode === 'off') return;
+        if (mode === 'global') {
+            if (!rainViewerFrames.length) loadRadarFrames();
+            radarPlaying = true;
+            document.getElementById('playBtn').style.opacity = '0.5';
+            const tick = () => {
+                if (!radarPlaying) return;
+                if (!rainViewerFrames.length) return;
+                radarCurrentIndex = (radarCurrentIndex + 1) % rainViewerFrames.length;
+                showRainViewerFrame(radarCurrentIndex);
+                radarTimer = setTimeout(tick, getRadarSpeedMs());
+            };
+            radarTimer = setTimeout(tick, getRadarSpeedMs());
+            return;
+        }
         if (!iemRadarLayers.length) loadRadarFrames();
         if (!iemRadarLayers.length) return;
         radarPlaying = true;
         document.getElementById('playBtn').style.opacity = '0.5';
         const tick = () => {
             if (!radarPlaying) return;
-            // Cycle all IEM time frames (not the 2 display layers)
             radarCurrentIndex = (radarCurrentIndex + 1) % radarFrameIds.length;
             showRadarFrame(radarCurrentIndex);
             radarTimer = setTimeout(tick, getRadarSpeedMs());
