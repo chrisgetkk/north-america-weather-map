@@ -2,8 +2,8 @@ name: Fetch HRRR Model
 
 on:
   schedule:
-    # Every hour at :45 UTC — a bit more lag after each cycle hour
-    - cron: "45 * * * *"
+    # Every hour at :42 UTC — a bit more lag after each cycle hour
+    - cron: "42 * * * *"
   workflow_dispatch:
 
 jobs:
