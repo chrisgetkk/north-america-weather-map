@@ -270,14 +270,11 @@ def try_cycles(cycle_list, tag):
             time.sleep(0.3)
     return None, None
 
-# Newest cycle first; one 12-minute retry if it 404s, then older cycles (KCMH probe only)
+# Newest cycle first; if not ready, immediately fall back to older cycles (no long wait)
 if cycles:
     chosen, sample_raw = try_cycles([cycles[0]], "[HRRR newest]")
-    if chosen is None:
-        print("[HRRR] Newest cycle not ready; waiting 12 minutes for one retry...")
-        time.sleep(720)
-        chosen, sample_raw = try_cycles([cycles[0]], "[HRRR newest-retry]")
     if chosen is None and len(cycles) > 1:
+        print("[HRRR] Newest cycle not ready; falling back to older cycles immediately")
         chosen, sample_raw = try_cycles(cycles[1:], "[HRRR older]")
 
 if not chosen:
